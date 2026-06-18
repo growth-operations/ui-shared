@@ -5,8 +5,7 @@ import {
   Heading,
   Text,
   Tile,
-  Link,
-  LoadingSpinner,
+  LoadingButton,
   Alert,
 } from "@hubspot/ui-extensions";
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
@@ -41,6 +40,10 @@ function StatusPanel({ entitlement }) {
     cancel_at_period_end,
   } = entitlement;
 
+  // HubSpot's Alert renders `title` beside the body in a narrow column, which
+  // squeezes multi-line status detail into awkward wraps. Put the headline as a
+  // bold first line INSIDE the body (full width) and leave the Alert title unset
+  // so the detail flows across the panel.
   if (status === "trialing") {
     const trialEnd = trial_ends_at || current_period_end || sandbox_trial_expires_at;
     const left = daysUntil(trialEnd);
@@ -51,21 +54,27 @@ function StatusPanel({ entitlement }) {
         ? "Your free trial ends today"
         : `${left} day${left === 1 ? "" : "s"} left in your free trial`;
     return (
-      <Alert title={leftLabel} variant="warning">
-        <Text>
-          Trial ends {fmtDate(trialEnd)}. Add a plan in Stripe before then to
-          keep syncing.
-        </Text>
+      <Alert variant="warning">
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>{leftLabel}</Text>
+          <Text>
+            Trial ends {fmtDate(trialEnd)}. Add a plan in Stripe before then to
+            keep syncing.
+          </Text>
+        </Flex>
       </Alert>
     );
   }
 
   if (status === "active") {
     return (
-      <Alert title="You're all set" variant="success">
+      <Alert variant="success">
         <Flex direction="column" gap="extra-small">
-          <Text>Your subscription is active.</Text>
-          <Text>Next renewal: {fmtDate(current_period_end)}</Text>
+          <Text format={{ fontWeight: "bold" }}>You're all set</Text>
+          <Text>
+            Your subscription is active. Next renewal:{" "}
+            {fmtDate(current_period_end)}.
+          </Text>
           {cancel_at_period_end && (
             <Text format={{ fontStyle: "italic" }}>
               Cancels at the end of the current period.
@@ -78,19 +87,27 @@ function StatusPanel({ entitlement }) {
 
   if (status === "past_due") {
     return (
-      <Alert title="Your subscription is past due" variant="error">
-        <Text>
-          We couldn't process your latest payment. Update your payment method in
-          Stripe to avoid losing access.
-        </Text>
+      <Alert variant="error">
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>
+            Your subscription is past due
+          </Text>
+          <Text>
+            We couldn't process your latest payment. Update your payment method
+            in Stripe to avoid losing access.
+          </Text>
+        </Flex>
       </Alert>
     );
   }
 
   if (status === "pending_purchase") {
     return (
-      <Alert title="Your free trial has ended" variant="warning">
-        <Text>Choose a plan in Stripe to resume syncing your data.</Text>
+      <Alert variant="warning">
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>Your free trial has ended</Text>
+          <Text>Choose a plan in Stripe to resume syncing your data.</Text>
+        </Flex>
       </Alert>
     );
   }
@@ -173,19 +190,23 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
 
   return (
     <Flex direction="column" gap="medium">
-      {/* PRIMARY CTA at the very top, large and obvious (per billing feedback). */}
-      {portalUrl ? (
-        <Link href={{ url: portalUrl, external: true }} variant="primary">
-          Manage billing in Stripe
-        </Link>
-      ) : loading ? (
-        <LoadingSpinner showLabel label="Preparing billing…" />
+      {/* PRIMARY CTA at the very top, large and obvious (per billing feedback).
+          A Button with href navigates to the portal (Button supports href +
+          external) so it reads as a real button, not a text link; LoadingButton
+          shows the prepared/loading state inline. */}
+      {error ? (
+        <Alert title="Couldn't open billing" variant="danger">
+          <Text>{error}</Text>
+        </Alert>
       ) : (
-        error && (
-          <Alert title="Couldn't open billing" variant="danger">
-            <Text>{error}</Text>
-          </Alert>
-        )
+        <LoadingButton
+          href={portalUrl ? { url: portalUrl, external: true } : undefined}
+          loading={loading}
+          disabled={!portalUrl}
+          variant="primary"
+        >
+          {portalUrl ? "Manage billing in Stripe" : "Preparing billing…"}
+        </LoadingButton>
       )}
 
       <StatusPanel entitlement={state?.entitlement} />
@@ -212,19 +233,21 @@ function CreditsBilling({ context, state, appKey }) {
         creditMeter={state?.credit_meter}
       />
 
-      {/* PRIMARY CTA at top: pick a plan / buy credits. */}
-      {portalUrl ? (
-        <Link href={{ url: portalUrl, external: true }} variant="primary">
-          Pick a plan or buy credits
-        </Link>
-      ) : loading ? (
-        <LoadingSpinner showLabel label="Preparing checkout…" />
+      {/* PRIMARY CTA at top: pick a plan / buy credits. Button-with-href so it
+          reads as a real button; LoadingButton shows the prepared/loading state. */}
+      {error ? (
+        <Alert title="Couldn't open checkout" variant="danger">
+          <Text>{error}</Text>
+        </Alert>
       ) : (
-        error && (
-          <Alert title="Couldn't open checkout" variant="danger">
-            <Text>{error}</Text>
-          </Alert>
-        )
+        <LoadingButton
+          href={portalUrl ? { url: portalUrl, external: true } : undefined}
+          loading={loading}
+          disabled={!portalUrl}
+          variant="primary"
+        >
+          {portalUrl ? "Pick a plan or buy credits" : "Preparing checkout…"}
+        </LoadingButton>
       )}
 
       <Text format={{ fontStyle: "italic" }}>
