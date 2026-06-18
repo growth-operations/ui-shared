@@ -114,12 +114,18 @@ function usePortalSession({ context, state, appKey }) {
   // UI Extensions have no open-URL action — only Link, whose href must exist
   // before render).
   useStrictModeEffect(
-    async ({ mounted }) => {
+    async ({ mounted, resetOnUnmount }) => {
       // `state` is the /v1/home payload, fetched async by the host page — it's
       // null on the first render(s). Don't mistake "not loaded yet" for
-      // "misconfigured": stay in loading until state arrives, then decide. The
-      // effect re-runs when state?.billing_base_url changes (see deps).
-      if (!state) return;
+      // "misconfigured": stay in loading until state arrives, then decide.
+      // IMPORTANT: useStrictModeEffect latches an internal fetchedRef on any
+      // normal completion, so a bare `return` here would block the re-run when
+      // state later arrives (→ spinner forever). resetOnUnmount() clears that
+      // ref so the deps-change re-run (state?.billing_base_url) actually fires.
+      if (!state) {
+        resetOnUnmount();
+        return;
+      }
       try {
         const base = state.billing_base_url;
         if (!base) throw new Error("Billing service not configured");
