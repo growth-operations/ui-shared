@@ -8,7 +8,10 @@
 //      shared with other importers.
 //
 // getSettings accepts { force } to bypass the cache (e.g. polling for live sync
-// status, which a stale cache would otherwise mask). updateSettings invalidates
+// status, which a stale cache would otherwise mask). `force` bypasses BOTH the
+// frontend module cache AND the backend account cache: it appends ?fresh=1 so a
+// backend that honors it (e.g. toast's CacheableMixin-backed /settings) reads
+// live state instead of its own ~120s-cached copy. updateSettings invalidates
 // the cache on write.
 //
 // All requests go through callAppApi → hubspot.fetch rules apply (object body,
@@ -33,9 +36,14 @@ export function makeSettingsApi({ path = "/api/v1/settings" } = {}) {
       return settingsPromise;
     }
 
+    // On a forced read, also ask the backend to bypass its own cache (?fresh=1)
+    // so we don't just re-fetch a server-side-stale copy.
+    const reqPath = force
+      ? `${path}${path.includes("?") ? "&" : "?"}fresh=1`
+      : path;
     const fetchPromise = (async () => {
       try {
-        const settings = await callAppApi(context, path, "GET");
+        const settings = await callAppApi(context, reqPath, "GET");
         cachedSettings = settings;
         settingsPromise = null;
         return settings;
