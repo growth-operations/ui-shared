@@ -78,6 +78,15 @@ contract serves all archetypes; components branch on `entitlement.mode`.
 }
 ```
 
+## Navigation
+In-app CTAs (onboarding steps, nudges) carry `cta_route` (an app-page path like
+`/billing`). The host app passes `onNavigate(route)` to `<AppHome>` wired to the
+pages SDK action **`actions.navigateToPage({ to: route })`** — this DOES exist
+in @hubspot/ui-extensions (it's in the pages `actions` object, present since
+0.13.x; not in the `usePageRoute` hooks file, which is why it's easy to miss).
+Use `cta_url` (external/full deep link) only for genuinely external targets
+(e.g. the settings extension deep link), which render as an external `Link`.
+
 ## Rules
 - `entitlement.entitled` is the ONLY gate the UI/feature checks read. Backend computes it
   (trial: is_entitled status; credits: remaining > 0).

@@ -165,9 +165,7 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
       {/* PRIMARY CTA at the very top, large and obvious (per billing feedback). */}
       {portalUrl ? (
         <Link href={{ url: portalUrl, external: true }} variant="primary">
-          <Text format={{ fontWeight: "bold", fontSize: "lg" }}>
-            Manage billing in Stripe →
-          </Text>
+          Manage billing in Stripe
         </Link>
       ) : loading ? (
         <LoadingSpinner showLabel label="Preparing billing…" />
@@ -206,9 +204,7 @@ function CreditsBilling({ context, state, appKey }) {
       {/* PRIMARY CTA at top: pick a plan / buy credits. */}
       {portalUrl ? (
         <Link href={{ url: portalUrl, external: true }} variant="primary">
-          <Text format={{ fontWeight: "bold", fontSize: "lg" }}>
-            Pick a plan / Buy credits →
-          </Text>
+          Pick a plan or buy credits
         </Link>
       ) : loading ? (
         <LoadingSpinner showLabel label="Preparing checkout…" />
