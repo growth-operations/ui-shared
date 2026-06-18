@@ -115,8 +115,13 @@ function usePortalSession({ context, state, appKey }) {
   // before render).
   useStrictModeEffect(
     async ({ mounted }) => {
+      // `state` is the /v1/home payload, fetched async by the host page — it's
+      // null on the first render(s). Don't mistake "not loaded yet" for
+      // "misconfigured": stay in loading until state arrives, then decide. The
+      // effect re-runs when state?.billing_base_url changes (see deps).
+      if (!state) return;
       try {
-        const base = state?.billing_base_url;
+        const base = state.billing_base_url;
         if (!base) throw new Error("Billing service not configured");
         if (!appKey) throw new Error("Missing appKey for billing portal");
         const portalId = context?.portal?.id;
