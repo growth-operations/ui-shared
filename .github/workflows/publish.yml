@@ -1,0 +1,47 @@
+name: Publish
+
+# Publish to npm when a version tag is pushed (e.g. v1.2.3).
+#
+# Uses npm Trusted Publishers (OIDC) — NO long-lived NPM_TOKEN secret. The
+# package is authenticated via a short-lived OIDC token minted by GitHub and
+# trusted by npm. Provenance is generated automatically (public repo + GitHub
+# runner), so no --provenance flag is needed.
+#
+# ONE-TIME SETUP (before this Action can publish):
+#   1. The package must already exist on npm — do the first publish manually:
+#        npm publish --access public   (from a logged-in local with the @growth-operations org)
+#   2. On npmjs.com, in the package's Settings → Trusted Publisher, bind:
+#        Organization/user: growth-operations
+#        Repository:        ui-shared
+#        Workflow filename: publish.yml
+#        (Environment: leave blank unless you add one below)
+# After that, every `git push` of a v* tag publishes via OIDC with no secrets.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # mint the OIDC token npm trusts
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22" # Trusted Publishers needs node >= 22.14
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishers requires npm CLI >= 11.5.1 (newer than the npm
+      # bundled with node 22). Upgrade before publishing.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      # No build step — the package ships source (HubSpot's bundler transpiles
+      # JSX at the consuming app's `hs project upload`). publishConfig.access
+      # is "public" in package.json. No NODE_AUTH_TOKEN: OIDC handles auth.
+      - name: Publish to npm
+        run: npm publish

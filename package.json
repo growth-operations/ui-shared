@@ -1,0 +1,23 @@
+{
+  "name": "@growth-operations/ui-shared",
+  "version": "1.0.0",
+  "description": "Shared HubSpot UI-extension modules (Home, Billing) for Growth Operations apps.",
+  "license": "MIT",
+  "private": false,
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/growth-operations/ui-shared.git"
+  },
+  "peerDependencies": {
+    "@hubspot/ui-extensions": ">=0.13.0",
+    "react": ">=18.0.0"
+  }
+}
