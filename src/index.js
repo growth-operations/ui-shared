@@ -12,6 +12,7 @@ export { OnboardingChecklist } from "./home/OnboardingChecklist";
 export { SyncPulse } from "./home/SyncPulse";
 export { FeatureNudges } from "./home/FeatureNudges";
 export { CreditMeter } from "./home/CreditMeter";
+export { HelpfulLinks } from "./home/HelpfulLinks";
 
 // Billing.
 export { BillingTab } from "./billing/BillingTab";
