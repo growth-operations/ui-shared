@@ -145,6 +145,11 @@ function usePortalSession({ context, state, appKey }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [portalUrl, setPortalUrl] = useState(null);
+  // "Not ready" = the install hasn't been provisioned with a Stripe customer
+  // yet (fresh/old account: no entitlement.status, or the portal endpoint 409s
+  // with "no Stripe customer"). That's an expected pre-purchase state, not an
+  // error — the UI shows a calm "finish setup" message instead of a red alert.
+  const [notReady, setNotReady] = useState(false);
 
   // Pre-create on mount so the link is one real click (Stripe can't be iframed;
   // UI Extensions have no open-URL action — only Link, whose href must exist
@@ -160,6 +165,17 @@ function usePortalSession({ context, state, appKey }) {
       // ref so the deps-change re-run (state?.billing_base_url) actually fires.
       if (!state) {
         resetOnUnmount();
+        return;
+      }
+      // No Stripe customer yet → don't even try to open a portal. An install
+      // that hasn't been provisioned (no entitlement, or status null/
+      // not_installed) has nothing to manage; show the calm "not ready" state.
+      const status = state?.entitlement?.status;
+      if (!state.entitlement || status == null || status === "not_installed") {
+        if (mounted.current) {
+          setNotReady(true);
+          setLoading(false);
+        }
         return;
       }
       try {
@@ -187,25 +203,54 @@ function usePortalSession({ context, state, appKey }) {
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Billing portal request failed (${res.status}): ${text}`);
+          // 409 "no Stripe customer yet" is the not-provisioned case, not a
+          // failure — surface it as the calm not-ready state.
+          if (res.status === 409 && /no stripe customer/i.test(text)) {
+            if (mounted.current) setNotReady(true);
+          } else {
+            throw new Error(`Billing portal request failed (${res.status}): ${text}`);
+          }
+        } else {
+          const { url } = await res.json();
+          if (!url) throw new Error("No billing portal URL returned");
+          if (mounted.current) setPortalUrl(url);
         }
-        const { url } = await res.json();
-        if (!url) throw new Error("No billing portal URL returned");
-        if (mounted.current) setPortalUrl(url);
       } catch (perr) {
         if (mounted.current) setError(String(perr));
       } finally {
         if (mounted.current) setLoading(false);
       }
     },
-    [context, appKey, state?.billing_base_url, state?.app_id]
+    [context, appKey, state?.billing_base_url, state?.app_id, state?.entitlement?.status]
   );
 
-  return { portalUrl, loading, error };
+  return { portalUrl, loading, error, notReady };
 }
 
 function TrialSubscriptionBilling({ context, state, appKey }) {
-  const { portalUrl, loading, error } = usePortalSession({ context, state, appKey });
+  const { portalUrl, loading, error, notReady } = usePortalSession({
+    context,
+    state,
+    appKey,
+  });
+
+  // Install not provisioned with a Stripe customer yet — calm "finish setup"
+  // state, not a red error. (Old/stale installs, or before the install flow's
+  // provision_trial_install has run.)
+  if (notReady) {
+    return (
+      <Flex direction="column" gap="medium">
+        <Alert title="Billing isn't set up yet" variant="info">
+          <Text>
+            Your trial and billing are still being set up for this install. Once
+            setup completes, manage your plan and payment method here. If this
+            persists, reinstall the app from the HubSpot marketplace to complete
+            sign-in.
+          </Text>
+        </Alert>
+      </Flex>
+    );
+  }
 
   return (
     <Flex direction="column" gap="medium">
