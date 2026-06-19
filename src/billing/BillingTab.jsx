@@ -34,10 +34,12 @@ function StatusPanel({ entitlement }) {
   if (!entitlement) return null;
   const {
     status,
+    mode,
     current_period_end,
     trial_ends_at,
     sandbox_trial_expires_at,
     cancel_at_period_end,
+    has_payment_method,
   } = entitlement;
 
   // HubSpot's Alert renders `title` beside the body in a narrow column, which
@@ -53,13 +55,26 @@ function StatusPanel({ entitlement }) {
         : left <= 0
         ? "Your free trial ends today"
         : `${left} day${left === 1 ? "" : "s"} left in your free trial`;
+    // What (if anything) the customer must do before the trial ends, by mode:
+    //  - credits: pick/buy a credit plan to continue.
+    //  - trial_subscription (plan already chosen — toast): the trial just needs
+    //    a payment method. If one's already on file it auto-converts (nothing to
+    //    do); if not, they must add one or Stripe cancels at trial end.
+    //    has_payment_method may be null (unknown) — then give the safe ask.
+    const trialCta =
+      mode === "credits"
+        ? "Choose a plan in Stripe before then to keep going."
+        : has_payment_method === true
+          ? "Your payment method is on file, so it converts automatically — nothing to do."
+          : has_payment_method === false
+            ? "Add a payment method in Stripe before then, or your subscription will be canceled."
+            : "Add a payment method in Stripe before then so your subscription continues.";
     return (
       <Alert variant="warning">
         <Flex direction="column" gap="extra-small">
           <Text format={{ fontWeight: "bold" }}>{leftLabel}</Text>
           <Text>
-            Trial ends {fmtDate(trialEnd)}. Add a plan in Stripe before then to
-            keep syncing.
+            Trial ends {fmtDate(trialEnd)}. {trialCta}
           </Text>
         </Flex>
       </Alert>
@@ -102,11 +117,15 @@ function StatusPanel({ entitlement }) {
   }
 
   if (status === "pending_purchase") {
+    const resumeCta =
+      mode === "credits"
+        ? "Choose a plan in Stripe to resume."
+        : "Add a payment method in Stripe to resume syncing your data.";
     return (
       <Alert variant="warning">
         <Flex direction="column" gap="extra-small">
           <Text format={{ fontWeight: "bold" }}>Your free trial has ended</Text>
-          <Text>Choose a plan in Stripe to resume syncing your data.</Text>
+          <Text>{resumeCta}</Text>
         </Flex>
       </Alert>
     );
