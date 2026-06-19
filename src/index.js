@@ -27,6 +27,19 @@ export {
 } from "./lib/format";
 export { useStrictModeEffect } from "./lib/useStrictModeEffect";
 
+// HubSpot URL builders (app.hubspot.com record/property/list links).
+export {
+  buildContactUrl,
+  buildRecordUrl,
+  buildObjectListUrl,
+  buildContactListCreateUrl,
+  buildContactListEditUrl,
+  buildFormEditorUrl,
+  buildPropertySettingsUrl,
+  buildPropertyName,
+  buildPropertyNames,
+} from "./lib/urls";
+
 // SDK — the token + API utility layer (see README "SDK" section and src/sdk/).
 export {
   // App backend
