@@ -35,18 +35,26 @@ export function HelpfulLinks({
   links = [],
   title = "Helpful Links",
 }) {
+  // external=false keeps navigation in the SAME tab. The app-pages deep link is
+  // an in-app HubSpot URL, so it must stay same-tab (external:true would force a
+  // new tab). Docs/support and app-specific extras are off-platform → external.
   const items = [];
 
   if (appPages && appId && portalId != null) {
     items.push({
       label: `Open ${appName} →`,
       url: appPagesUrl(portalId, appId, appPagesPath),
+      external: false,
     });
   }
-  if (docsUrl) items.push({ label: "Documentation", url: docsUrl });
-  if (supportUrl) items.push({ label: "Support", url: supportUrl });
+  if (docsUrl) items.push({ label: "Documentation", url: docsUrl, external: true });
+  if (supportUrl) items.push({ label: "Support", url: supportUrl, external: true });
   for (const l of links) {
-    if (l && l.url && l.label) items.push({ label: l.label, url: l.url });
+    if (l && l.url && l.label) {
+      // Default app-specific extras to external (they're usually HubSpot record
+      // URLs or off-platform), but let a link opt into same-tab via external:false.
+      items.push({ label: l.label, url: l.url, external: l.external !== false });
+    }
   }
 
   if (items.length === 0) return null;
@@ -56,7 +64,7 @@ export function HelpfulLinks({
       <Text format={{ fontWeight: "bold" }}>{title}</Text>
       <Divider />
       {items.map((item) => (
-        <Link key={item.url} href={{ url: item.url, external: true }}>
+        <Link key={item.url} href={{ url: item.url, external: item.external }}>
           {item.label}
         </Link>
       ))}

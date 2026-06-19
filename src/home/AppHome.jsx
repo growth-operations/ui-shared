@@ -6,6 +6,7 @@ import { OnboardingChecklist } from "./OnboardingChecklist";
 import { SyncPulse } from "./SyncPulse";
 import { CreditMeter } from "./CreditMeter";
 import { FeatureNudges } from "./FeatureNudges";
+import { HelpfulLinks } from "./HelpfulLinks";
 
 // Minimal inline ATS tile (the `pipeline` block). Kept tiny here rather than a
 // separate file — it's the simplest of the three archetype tiles. Renders
@@ -76,7 +77,13 @@ function ArchetypeTile({ state }) {
 //                PageLink navigation (the host owns the router).
 //   appName    — display name override; defaults to state.app.name.
 //   onRetry    — optional, passed to InstallProgress for the failed state.
-export function AppHome({ state, onNavigate, appName, onRetry }) {
+//   helpfulLinks — optional props for the standard HelpfulLinks section
+//                  (e.g. { portalId, appId, appName, docsUrl, supportUrl,
+//                  links }). Omit to hide the section. The host passes this
+//                  (it owns context.portal.id + the app's docs/support); it can
+//                  also come from a state.helpful_links block if the backend
+//                  builds one.
+export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
   if (!state) {
     return <LoadingSpinner showLabel label="Loading…" />;
   }
@@ -85,10 +92,21 @@ export function AppHome({ state, onNavigate, appName, onRetry }) {
   const activationComplete =
     !activation || activation.complete === true || activation.status === "completed";
 
+  // HelpfulLinks props: explicit prop wins, else a state.helpful_links block if
+  // the backend builds one. Shown in both the install and cockpit views so help
+  // is reachable even mid-setup.
+  const links = helpfulLinks ?? state.helpful_links ?? null;
+  const helpfulLinksEl = links ? <HelpfulLinks {...links} /> : null;
+
   // Install isn't finished (running / failed / completed-with-warnings) — show
   // the install experience instead of the cockpit.
   if (!activationComplete) {
-    return <InstallProgress state={state} onRetry={onRetry} />;
+    return (
+      <Flex direction="column" gap="medium">
+        <InstallProgress state={state} onRetry={onRetry} />
+        {helpfulLinksEl}
+      </Flex>
+    );
   }
 
   const onboardingComplete = state.onboarding?.complete === true;
@@ -108,6 +126,8 @@ export function AppHome({ state, onNavigate, appName, onRetry }) {
       <ArchetypeTile state={state} />
 
       <FeatureNudges nudges={state.nudges} onNavigate={onNavigate} />
+
+      {helpfulLinksEl}
     </Flex>
   );
 }
