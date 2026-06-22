@@ -14,6 +14,20 @@ export function fmtDate(value) {
   });
 }
 
+// Date + time, for logs where multiple events share a day (usage history). "—"
+// when null/unparseable.
+export function fmtDateTime(value) {
+  if (value == null) return "—";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // Whole days from now until `value` (negative = past). null if unparseable.
 export function daysUntil(value) {
   if (value == null) return null;
