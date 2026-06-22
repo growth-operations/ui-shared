@@ -6,6 +6,7 @@ import {
   Text,
   Tile,
   LoadingButton,
+  Button,
   Alert,
 } from "@hubspot/ui-extensions";
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
@@ -339,13 +340,38 @@ function CreditsBilling({ context, state, appKey }) {
   );
 }
 
+// Legacy (Anvil) installs are billed through their existing subscription, NOT
+// the credit model. Render a calm informational panel — never the credit meter
+// or plan picker, which would falsely tell a paying Anvil customer they're out
+// of credits and push them to buy a credit plan.
+function LegacyBilling({ state }) {
+  const manageUrl = state?.legacy_billing_url;
+  return (
+    <Flex direction="column" gap="medium">
+      <Alert title="Managed through your existing subscription" variant="info">
+        <Text>
+          Your plan and payment method are billed through your existing
+          subscription. There's nothing to set up here.
+        </Text>
+      </Alert>
+      {manageUrl && (
+        <Button href={{ url: manageUrl, external: true }} variant="secondary">
+          Manage subscription
+        </Button>
+      )}
+    </Flex>
+  );
+}
+
 export function BillingTab({ context, state, appKey }) {
   const mode = state?.entitlement?.mode;
 
   return (
     <Flex direction="column" gap="medium">
       <Heading>Billing</Heading>
-      {mode === "credits" ? (
+      {mode === "legacy" ? (
+        <LegacyBilling state={state} />
+      ) : mode === "credits" ? (
         <CreditsBilling context={context} state={state} appKey={appKey} />
       ) : (
         <TrialSubscriptionBilling context={context} state={state} appKey={appKey} />
