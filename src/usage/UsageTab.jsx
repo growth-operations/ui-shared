@@ -87,8 +87,12 @@ export function UsageTab({
 
   const series = data?.series ?? [];
   const usedInWindow = data?.used_in_window ?? 0;
-  const remaining = data?.remaining ?? 0;
-  const granted = data?.granted ?? 0;
+  // Legacy (Anvil) installs have no credit balance — the backend returns null
+  // granted/remaining. Show only the window usage stat for them; credit installs
+  // get the full granted/remaining breakdown.
+  const remaining = data?.remaining;
+  const granted = data?.granted;
+  const hasBalance = remaining != null && granted != null;
   const hasActivity = usedInWindow > 0;
 
   return (
@@ -106,9 +110,9 @@ export function UsageTab({
 
       <Tile>
         <Statistics>
-          <StatisticsItem label="Credits used (window)" number={usedInWindow} />
-          <StatisticsItem label="Remaining" number={remaining} />
-          <StatisticsItem label="Granted" number={granted} />
+          <StatisticsItem label="Used (window)" number={usedInWindow} />
+          {hasBalance && <StatisticsItem label="Remaining" number={remaining} />}
+          {hasBalance && <StatisticsItem label="Granted" number={granted} />}
         </Statistics>
       </Tile>
 
