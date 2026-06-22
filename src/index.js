@@ -21,9 +21,13 @@ export { PlanGrid } from "./billing/PlanGrid";
 // Alerts — the shared customer alerts table (level filter, sort, dismiss).
 export { AlertsTab } from "./alerts/AlertsTab";
 
+// Usage — the shared credit usage view (per-day LineChart + window stats).
+export { UsageTab } from "./usage/UsageTab";
+
 // Lib helpers.
 export {
   fmtDate,
+  fmtDateTime,
   fmtMoney,
   daysUntil,
   humanizeStatus,
