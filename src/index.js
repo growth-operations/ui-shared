@@ -18,6 +18,9 @@ export { HelpfulLinks } from "./home/HelpfulLinks";
 export { BillingTab } from "./billing/BillingTab";
 export { PlanGrid } from "./billing/PlanGrid";
 
+// Alerts — the shared customer alerts table (level filter, sort, dismiss).
+export { AlertsTab } from "./alerts/AlertsTab";
+
 // Lib helpers.
 export {
   fmtDate,
