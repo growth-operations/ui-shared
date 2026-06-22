@@ -16,10 +16,12 @@ export { HelpfulLinks } from "./home/HelpfulLinks";
 
 // Billing.
 export { BillingTab } from "./billing/BillingTab";
+export { PlanGrid } from "./billing/PlanGrid";
 
 // Lib helpers.
 export {
   fmtDate,
+  fmtMoney,
   daysUntil,
   humanizeStatus,
   statusVariant,
