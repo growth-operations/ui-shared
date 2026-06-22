@@ -69,8 +69,29 @@ contract serves all archetypes; components branch on `entitlement.mode`.
 
   // ARCHETYPE ACTIVITY TILE — at most ONE present.
   "sync_pulse":   { "last_sync_at": "...", "records_synced": 1240, "records_failed": 2, "label": "Contact sync" }, // big_app
-  "credit_meter": { "granted": 100, "used": 37, "remaining": 63, "recent": [ { "at": "...", "amount": 3, "action": "..." } ] }, // credit
+  "credit_meter": { "granted": 100, "used": 37, "remaining": 63, "recent": [ { "at": "...", "amount": 3, "action": "Parsed 3 line items on Deal Acme" } ] }, // credit — `recent` from the credit ledger (common.entitlements.CreditService.recent_usage → build_credit_meter); each entry projects a metered debit (action label + amount + time), so customers see itemized usage in-app.
   "pipeline":     { "open_jobs": 4, "applications_by_stage": { "applied": 12, "interview": 3 }, "outstanding_scorecards": 5 }, // ats
+
+  // PLANS — credit apps only. The pickable upgrade path for the Billing tab,
+  // built from the Stripe catalog mirror (common.billing.catalog.get_plans).
+  // Drives the shared <PlanGrid>. Tiers sorted by tier_order; each carries its
+  // monthly and/or annual Stripe price_id for checkout. `current` marks the
+  // tier the account is on (free grant => no current paid tier). Absent for
+  // non-credit apps. talk_to_sales tiers (enterprise) hide price + checkout and
+  // show a contact CTA instead.
+  "plans": [
+    { "tier": "free", "name": "Free", "tier_order": 0, "credits_per_period": 100,
+      "features": ["100 credits/mo", "Community support"], "talk_to_sales": false,
+      "current": true, "monthly": null, "annual": null },
+    { "tier": "starter", "name": "Starter", "tier_order": 1, "credits_per_period": 1000,
+      "features": ["1,000 credits/mo", "Email support"], "talk_to_sales": false,
+      "current": false,
+      "monthly": { "price_id": "price_123", "unit_amount": 2900, "currency": "usd" },
+      "annual":  { "price_id": "price_456", "unit_amount": 29000, "currency": "usd" } },
+    { "tier": "enterprise", "name": "Enterprise", "tier_order": 3, "credits_per_period": null,
+      "features": ["Custom volume", "SSO", "Dedicated support"], "talk_to_sales": true,
+      "current": false, "monthly": null, "annual": null }
+  ],
 
   // Deep-link plumbing — common.
   "billing_base_url": "https://billing.growth-operations.com",

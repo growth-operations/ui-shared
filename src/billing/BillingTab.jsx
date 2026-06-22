@@ -11,6 +11,7 @@ import {
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { fmtDate, daysUntil } from "../lib/format";
 import { CreditMeter } from "../home/CreditMeter";
+import { PlanGrid } from "./PlanGrid";
 
 // The shared Billing tab for all Growth Operations apps. Branches on the
 // entitlement union (CONTRACT.md):
@@ -284,11 +285,17 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
 }
 
 function CreditsBilling({ context, state, appKey }) {
-  // NOTE: the credit-pack / paid-allowance checkout backend is net-new and
-  // pending. For v1 the "Pick a plan" / "Buy credits" CTA reuses the same
-  // Stripe portal session pattern (routes to the portal); swap the endpoint to
-  // the credit checkout once that backend lands.
-  const { portalUrl, loading, error } = usePortalSession({ context, state, appKey });
+  // The Stripe portal session lets an EXISTING paid customer manage their plan
+  // / payment method / invoices (same pattern as the trial arm). NEW plan
+  // selection is the <PlanGrid> below, which pre-creates a per-tier checkout.
+  const { portalUrl, loading, error, notReady } = usePortalSession({
+    context,
+    state,
+    appKey,
+  });
+
+  const hasPlans = (state?.plans?.length ?? 0) > 0;
+  const onPaidPlan = !!state?.entitlement?.plan;
 
   return (
     <Flex direction="column" gap="medium">
@@ -297,26 +304,36 @@ function CreditsBilling({ context, state, appKey }) {
         creditMeter={state?.credit_meter}
       />
 
-      {/* PRIMARY CTA at top: pick a plan / buy credits. Button-with-href so it
-          reads as a real button; LoadingButton shows the prepared/loading state. */}
-      {error ? (
-        <Alert title="Couldn't open checkout" variant="danger">
-          <Text>{error}</Text>
-        </Alert>
-      ) : (
-        <LoadingButton
-          href={portalUrl ? { url: portalUrl, external: true } : undefined}
-          loading={loading}
-          disabled={!portalUrl}
-          variant="primary"
-        >
-          {portalUrl ? "Pick a plan or buy credits" : "Preparing checkout…"}
-        </LoadingButton>
-      )}
+      {/* The dynamically-rendered upgrade path (tiers from the Stripe catalog).
+          Renders nothing if no plans are mirrored yet. */}
+      <PlanGrid context={context} state={state} appKey={appKey} />
+
+      {/* Manage-billing link: relevant once the customer is on a paid plan
+          (change/cancel/invoices in Stripe). Hidden in the not-ready
+          (un-provisioned) state. When no plans are mirrored AND not on a paid
+          plan, fall back to the portal as the only CTA so the tab isn't empty. */}
+      {!notReady && (onPaidPlan || !hasPlans) &&
+        (error ? (
+          <Alert title="Couldn't open billing" variant="danger">
+            <Text>{error}</Text>
+          </Alert>
+        ) : (
+          <LoadingButton
+            href={portalUrl ? { url: portalUrl, external: true } : undefined}
+            loading={loading}
+            disabled={!portalUrl}
+            variant={onPaidPlan ? "secondary" : "primary"}
+          >
+            {portalUrl
+              ? onPaidPlan
+                ? "Manage billing in Stripe"
+                : "Buy credits in Stripe"
+              : "Preparing billing…"}
+          </LoadingButton>
+        ))}
 
       <Text format={{ fontStyle: "italic" }}>
-        Top up or move to a paid monthly allowance to keep going. Billing is
-        managed in Stripe across all Growth Operations apps.
+        Billing is managed in Stripe across all Growth Operations apps.
       </Text>
     </Flex>
   );

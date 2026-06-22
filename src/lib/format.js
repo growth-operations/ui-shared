@@ -22,6 +22,23 @@ export function daysUntil(value) {
   return Math.ceil((ms - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
+// Stripe amount (smallest currency unit, e.g. cents) -> "$29" / "€29.50".
+// Whole amounts drop the decimals; null/undefined -> "—". Currency defaults to
+// USD; falls back to an uppercased code prefix for currencies Intl can't symbol.
+export function fmtMoney(unitAmount, currency = "usd") {
+  if (unitAmount == null) return "—";
+  const amount = unitAmount / 100;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: (currency || "usd").toUpperCase(),
+      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${(currency || "usd").toUpperCase()} ${amount}`;
+  }
+}
+
 // Friendly labels for the AppInstallStatus enum (shared across apps).
 export const STATUS_LABELS = {
   trialing: "Free trial",
