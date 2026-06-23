@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   hubspot,
   Flex,
-  Box,
+  AutoGrid,
   Tile,
   Text,
   Heading,
@@ -38,7 +38,15 @@ import { fmtMoney } from "../lib/format";
 // feature bullets, and a CTA: "Current" (disabled) for the active tier,
 // "Contact sales" for talk_to_sales tiers, else "Choose" which pre-creates a
 // checkout session for that tier's price in the selected interval.
-function PlanCard({ plan, interval, onChoose, choosing, checkoutUrl, supportUrl }) {
+function PlanCard({
+  plan,
+  interval,
+  onChoose,
+  choosing,
+  checkoutUrl,
+  supportUrl,
+  maxFeatures = 0,
+}) {
   const leg = interval === "annual" ? plan.annual : plan.monthly;
   const periodLabel = interval === "annual" ? "/yr" : "/mo";
 
@@ -48,35 +56,38 @@ function PlanCard({ plan, interval, onChoose, choosing, checkoutUrl, supportUrl 
       ? `${fmtMoney(leg.unit_amount, leg.currency)}${periodLabel}`
       : "Free";
 
+  const features = plan.features ?? [];
+  // Align the CTA buttons across cards. HubSpot's column Flex does NOT stretch
+  // to the Tile height (AutoGrid equalizes the card height but flex={1}/justify
+  // had no vertical room to consume — verified in QA), so we can't push the CTA
+  // down with flex. Instead make the cards' CONTENT equal height: pad each
+  // feature list to maxFeatures with non-breaking-space spacer lines (a plain
+  // space collapses to zero height;   renders a real line). The CTAs then
+  // naturally land at the same y.
+  const padCount = Math.max(0, maxFeatures - features.length);
+
   return (
     <Tile>
-      {/* Full-height column: the content Box grows to fill so the CTA always
-          pins to the bottom, aligned across cards (the row stretches them to
-          equal height). Otherwise the button floats up under shorter feature
-          lists and the cards look ragged. */}
-      <Flex direction="column" gap="small" align="stretch">
-        <Box flex={1}>
-          <Flex direction="column" gap="small">
-            <Flex direction="row" gap="small" align="center">
-              <Heading>{plan.name ?? plan.tier}</Heading>
-              {plan.current && (
-                <StatusTag variant="success">Current plan</StatusTag>
-              )}
-            </Flex>
+      <Flex direction="column" gap="small">
+        <Flex direction="row" gap="small" align="center">
+          <Heading>{plan.name ?? plan.tier}</Heading>
+          {plan.current && (
+            <StatusTag variant="success">Current plan</StatusTag>
+          )}
+        </Flex>
 
-            <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
+        <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
 
-            {plan.credits_per_period != null && (
-              <Text>
-                {plan.credits_per_period.toLocaleString()} credits / month
-              </Text>
-            )}
+        {plan.credits_per_period != null && (
+          <Text>{plan.credits_per_period.toLocaleString()} credits / month</Text>
+        )}
 
-            {(plan.features ?? []).map((f, i) => (
-              <Text key={i}>• {f}</Text>
-            ))}
-          </Flex>
-        </Box>
+        {features.map((f, i) => (
+          <Text key={i}>• {f}</Text>
+        ))}
+        {Array.from({ length: padCount }).map((_, i) => (
+          <Text key={`pad-${i}`}>{" "}</Text>
+        ))}
 
         {/* CTA. Current tier => disabled marker. talk_to_sales => contact link.
             Otherwise pre-create-then-link checkout for the selected interval. */}
@@ -130,6 +141,12 @@ export function PlanGrid({ context, state, appKey }) {
   if (plans.length === 0) return null;
 
   const supportUrl = state?.helpful_links?.supportUrl ?? null;
+  // Max feature count across cards — each card pads to this so all cards share
+  // content height and the CTAs align (see PlanCard comment).
+  const maxFeatures = plans.reduce(
+    (m, p) => Math.max(m, (p.features ?? []).length),
+    0
+  );
 
   async function choose(plan, leg) {
     setError(null);
@@ -194,7 +211,9 @@ export function PlanGrid({ context, state, appKey }) {
         </Alert>
       )}
 
-      <Flex direction="row" gap="medium" wrap="wrap">
+      {/* AutoGrid(flexible): equal-width columns that wrap responsively. Card
+          height is equalized via the maxFeatures padding in PlanCard. */}
+      <AutoGrid columnWidth={240} flexible={true} gap="medium">
         {plans.map((plan) => (
           <PlanCard
             key={plan.tier}
@@ -204,9 +223,10 @@ export function PlanGrid({ context, state, appKey }) {
             choosing={choosingTier === plan.tier}
             checkoutUrl={checkoutUrls[`${plan.tier}:${interval}`]}
             supportUrl={supportUrl}
+            maxFeatures={maxFeatures}
           />
         ))}
-      </Flex>
+      </AutoGrid>
 
       <Text format={{ fontStyle: "italic" }}>
         Billing is managed in Stripe across all Growth Operations apps. Your new
