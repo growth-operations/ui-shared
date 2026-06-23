@@ -140,9 +140,10 @@ function StatusPanel({ entitlement }) {
   );
 }
 
-// Pre-creates a Stripe billing/checkout portal session on mount and returns
-// { portalUrl, loading, error }. Shared by both arms — the credits arm reuses
-// the same portal endpoint for v1 (see note in CreditsBilling below).
+// Pre-creates a Stripe Customer Portal session on mount (in-iframe POST) and
+// returns { portalUrl, loading, error, notReady }. Used by the TRIAL arm only —
+// the credits arm builds a direct /v1/billing/portal/start link instead (no
+// in-iframe fetch, avoiding the billing service's cold-start timeout).
 function usePortalSession({ context, state, appKey }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -169,18 +170,11 @@ function usePortalSession({ context, state, appKey }) {
         resetOnUnmount();
         return;
       }
-      // No Stripe customer yet → don't even try to open a portal. An install
-      // that hasn't been provisioned has nothing to manage; show the calm "not
-      // ready" state. The credits arm has NO `status` field (only the
-      // not_installed shell does) but DOES carry `plan` once paid — treat a set
-      // `plan` as ready so a paid credit customer gets the Manage button. Only
-      // the trial arm relies on `status`.
-      const ent = state?.entitlement;
-      const status = ent?.status;
-      const onPaidPlan = !!ent?.plan;
-      const notProvisioned =
-        !ent || status === "not_installed" || (status == null && !onPaidPlan);
-      if (notProvisioned) {
+      // No Stripe customer yet → don't even try to open a portal. A trial
+      // install that hasn't been provisioned (no entitlement, or status null/
+      // not_installed) has nothing to manage; show the calm "not ready" state.
+      const status = state?.entitlement?.status;
+      if (!state.entitlement || status == null || status === "not_installed") {
         if (mounted.current) {
           setNotReady(true);
           setLoading(false);
@@ -293,15 +287,27 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
 }
 
 function CreditsBilling({ context, state, appKey }) {
-  // The Stripe portal session lets an EXISTING paid customer manage/switch/cancel
-  // their plan, with proration handled by Stripe.
-  const { portalUrl, loading, error, notReady } = usePortalSession({
-    context,
-    state,
-    appKey,
-  });
-
   const onPaidPlan = !!state?.entitlement?.plan;
+
+  // Direct external link to the billing service's GET /v1/billing/portal/start,
+  // which resolves the customer + creates the Customer Portal session server-side
+  // and 303s to Stripe — IN THE OPENED TAB. No in-iframe portal-session fetch
+  // (that round trip hit the billing service's cold-start/CPU stall and surfaced
+  // as the iframe's 15s "Gateway took too long" error). Same pattern as
+  // PlanGrid's /checkout/start "Choose" button. null (button disabled) until
+  // billing_base_url is known.
+  const base = state?.billing_base_url ?? null;
+  const portalId = context?.portal?.id;
+  const returnUrl = state?.app_id
+    ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
+    : "https://app.hubspot.com/";
+  const portalStartUrl =
+    base && appKey && portalId
+      ? `${base}/v1/billing/portal/start` +
+        `?app_key=${encodeURIComponent(appKey)}` +
+        `&portal_id=${encodeURIComponent(String(portalId))}` +
+        `&return_url=${encodeURIComponent(returnUrl)}`
+      : null;
 
   // PAID: do NOT show the plan picker. The picker's "Choose" starts a NEW Stripe
   // Checkout subscription — clicking another tier would create a SECOND
@@ -316,21 +322,15 @@ function CreditsBilling({ context, state, appKey }) {
           entitlement={state?.entitlement}
           creditMeter={state?.credit_meter}
         />
-        {!notReady &&
-          (error ? (
-            <Alert title="Couldn't open billing" variant="danger">
-              <Text>{error}</Text>
-            </Alert>
-          ) : (
-            <LoadingButton
-              href={portalUrl ? { url: portalUrl, external: true } : undefined}
-              loading={loading}
-              disabled={!portalUrl}
-              variant="primary"
-            >
-              {portalUrl ? "Manage subscription" : "Preparing billing…"}
-            </LoadingButton>
-          ))}
+        <LoadingButton
+          href={
+            portalStartUrl ? { url: portalStartUrl, external: true } : undefined
+          }
+          disabled={!portalStartUrl}
+          variant="primary"
+        >
+          {portalStartUrl ? "Manage subscription" : "Preparing billing…"}
+        </LoadingButton>
         <Text format={{ fontStyle: "italic" }}>
           Change or cancel your plan in Stripe — billing is managed across all
           Growth Operations apps.
@@ -350,21 +350,17 @@ function CreditsBilling({ context, state, appKey }) {
         creditMeter={state?.credit_meter}
       />
       <PlanGrid context={context} state={state} appKey={appKey} />
-      {!notReady && !hasPlans &&
-        (error ? (
-          <Alert title="Couldn't open billing" variant="danger">
-            <Text>{error}</Text>
-          </Alert>
-        ) : (
-          <LoadingButton
-            href={portalUrl ? { url: portalUrl, external: true } : undefined}
-            loading={loading}
-            disabled={!portalUrl}
-            variant="primary"
-          >
-            {portalUrl ? "Buy credits in Stripe" : "Preparing billing…"}
-          </LoadingButton>
-        ))}
+      {!hasPlans && (
+        <LoadingButton
+          href={
+            portalStartUrl ? { url: portalStartUrl, external: true } : undefined
+          }
+          disabled={!portalStartUrl}
+          variant="primary"
+        >
+          {portalStartUrl ? "Buy credits in Stripe" : "Preparing billing…"}
+        </LoadingButton>
+      )}
       {!hasPlans && (
         <Text format={{ fontStyle: "italic" }}>
           Billing is managed in Stripe across all Growth Operations apps.
