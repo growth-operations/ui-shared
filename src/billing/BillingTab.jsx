@@ -170,10 +170,17 @@ function usePortalSession({ context, state, appKey }) {
         return;
       }
       // No Stripe customer yet → don't even try to open a portal. An install
-      // that hasn't been provisioned (no entitlement, or status null/
-      // not_installed) has nothing to manage; show the calm "not ready" state.
-      const status = state?.entitlement?.status;
-      if (!state.entitlement || status == null || status === "not_installed") {
+      // that hasn't been provisioned has nothing to manage; show the calm "not
+      // ready" state. The credits arm has NO `status` field (only the
+      // not_installed shell does) but DOES carry `plan` once paid — treat a set
+      // `plan` as ready so a paid credit customer gets the Manage button. Only
+      // the trial arm relies on `status`.
+      const ent = state?.entitlement;
+      const status = ent?.status;
+      const onPaidPlan = !!ent?.plan;
+      const notProvisioned =
+        !ent || status === "not_installed" || (status == null && !onPaidPlan);
+      if (notProvisioned) {
         if (mounted.current) {
           setNotReady(true);
           setLoading(false);
