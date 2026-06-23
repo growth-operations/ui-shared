@@ -1,16 +1,12 @@
 import React, { useState } from "react";
 import {
-  hubspot,
   Flex,
   AutoGrid,
   Tile,
   Text,
   Heading,
   StatusTag,
-  LoadingButton,
   Button,
-  Link,
-  Alert,
   ToggleGroup,
 } from "@hubspot/ui-extensions";
 import { fmtMoney } from "../lib/format";
@@ -41,9 +37,10 @@ import { fmtMoney } from "../lib/format";
 function PlanCard({
   plan,
   interval,
-  onChoose,
-  choosing,
-  checkoutUrl,
+  billingBaseUrl,
+  appKey,
+  portalId,
+  returnUrl,
   supportUrl,
   maxFeatures = 0,
 }) {
@@ -55,6 +52,18 @@ function PlanCard({
     : leg
       ? `${fmtMoney(leg.unit_amount, leg.currency)}${periodLabel}`
       : "Free";
+
+  // Direct one-click checkout link to the billing service's redirect endpoint.
+  // Null until we have everything (billing host, appKey, portal, this interval's
+  // price) — the button is disabled until then.
+  const startUrl =
+    billingBaseUrl && appKey && portalId && leg?.price_id
+      ? `${billingBaseUrl}/v1/billing/checkout/start` +
+        `?app_key=${encodeURIComponent(appKey)}` +
+        `&portal_id=${encodeURIComponent(portalId)}` +
+        `&price_id=${encodeURIComponent(leg.price_id)}` +
+        `&return_url=${encodeURIComponent(returnUrl ?? "")}`
+      : null;
 
   const features = plan.features ?? [];
   // Align the CTA buttons across cards. HubSpot's column Flex does NOT stretch
@@ -107,18 +116,19 @@ function PlanCard({
           <Text format={{ fontStyle: "italic" }}>
             Not available {interval === "annual" ? "annually" : "monthly"}
           </Text>
-        ) : checkoutUrl ? (
-          <Button href={{ url: checkoutUrl, external: true }} variant="primary">
-            Continue to checkout
-          </Button>
         ) : (
-          <LoadingButton
-            loading={choosing}
-            onClick={() => onChoose(plan, leg)}
+          // One-click: the button is a DIRECT external link to the billing
+          // service's GET /checkout/start, which creates the Stripe session
+          // server-side (in the opened tab) and 302s to Stripe. No in-iframe
+          // pre-create fetch — avoids the old two-click flow + the 15s iframe
+          // timeout. startUrl is null until billing_base_url is known.
+          <Button
+            href={startUrl ? { url: startUrl, external: true } : undefined}
+            disabled={!startUrl}
             variant="primary"
           >
             Choose {plan.name ?? plan.tier}
-          </LoadingButton>
+          </Button>
         )}
       </Flex>
     </Tile>
@@ -132,64 +142,23 @@ export function PlanGrid({ context, state, appKey }) {
   const annualAvailable =
     paid.length > 0 && paid.every((p) => p.annual);
   const [interval, setInterval] = useState(annualAvailable ? "annual" : "monthly");
-  const [choosingTier, setChoosingTier] = useState(null);
-  // Pre-created checkout URL keyed by `${tier}:${interval}` so a card only shows
-  // "Continue to checkout" for the exact price the customer picked.
-  const [checkoutUrls, setCheckoutUrls] = useState({});
-  const [error, setError] = useState(null);
 
   if (plans.length === 0) return null;
 
   const supportUrl = state?.helpful_links?.supportUrl ?? null;
+  const billingBaseUrl = state?.billing_base_url ?? null;
+  const portalId = context?.portal?.id;
+  // Where Stripe sends the customer back after pay/cancel — the app's Billing
+  // tab. The card builds the one-click /checkout/start link from these.
+  const returnUrl = state?.app_id
+    ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
+    : "https://app.hubspot.com/";
   // Max feature count across cards — each card pads to this so all cards share
   // content height and the CTAs align (see PlanCard comment).
   const maxFeatures = plans.reduce(
     (m, p) => Math.max(m, (p.features ?? []).length),
     0
   );
-
-  async function choose(plan, leg) {
-    setError(null);
-    setChoosingTier(plan.tier);
-    try {
-      const base = state?.billing_base_url;
-      if (!base) throw new Error("Billing service not configured");
-      if (!appKey) throw new Error("Missing appKey for checkout");
-      const portalId = context?.portal?.id;
-
-      const returnUrl = state?.app_id
-        ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
-        : "https://app.hubspot.com/";
-
-      // hubspot.fetch: body is a plain OBJECT (not a JSON string); only
-      // Authorization survives as a header — don't set Content-Type.
-      // presentation:"hosted" — a UI extension runs in a sandboxed iframe and
-      // can't mount Stripe's EMBEDDED checkout (no Stripe.js, nested-iframe 3DS
-      // fails), so request the HOSTED page and open its URL externally. The
-      // embedded default returns a client_secret (no url) → "No checkout URL".
-      const res = await hubspot.fetch(`${base}/v1/billing/checkout`, {
-        method: "POST",
-        body: {
-          app_key: appKey,
-          portal_id: String(portalId),
-          price_id: leg.price_id,
-          presentation: "hosted",
-          return_url: returnUrl,
-        },
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Checkout request failed (${res.status}): ${text}`);
-      }
-      const { url } = await res.json();
-      if (!url) throw new Error("No checkout URL returned");
-      setCheckoutUrls((prev) => ({ ...prev, [`${plan.tier}:${interval}`]: url }));
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setChoosingTier(null);
-    }
-  }
 
   return (
     <Flex direction="column" gap="medium">
@@ -210,12 +179,6 @@ export function PlanGrid({ context, state, appKey }) {
         )}
       </Flex>
 
-      {error && (
-        <Alert title="Couldn't start checkout" variant="danger">
-          <Text>{error}</Text>
-        </Alert>
-      )}
-
       {/* AutoGrid(flexible): equal-width columns that wrap responsively. Card
           height is equalized via the maxFeatures padding in PlanCard. */}
       <AutoGrid columnWidth={240} flexible={true} gap="medium">
@@ -224,9 +187,10 @@ export function PlanGrid({ context, state, appKey }) {
             key={plan.tier}
             plan={plan}
             interval={interval}
-            onChoose={choose}
-            choosing={choosingTier === plan.tier}
-            checkoutUrl={checkoutUrls[`${plan.tier}:${interval}`]}
+            billingBaseUrl={billingBaseUrl}
+            appKey={appKey}
+            portalId={portalId}
+            returnUrl={returnUrl}
             supportUrl={supportUrl}
             maxFeatures={maxFeatures}
           />
