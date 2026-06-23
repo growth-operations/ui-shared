@@ -286,34 +286,64 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
 }
 
 function CreditsBilling({ context, state, appKey }) {
-  // The Stripe portal session lets an EXISTING paid customer manage their plan
-  // / payment method / invoices (same pattern as the trial arm). NEW plan
-  // selection is the <PlanGrid> below, which pre-creates a per-tier checkout.
+  // The Stripe portal session lets an EXISTING paid customer manage/switch/cancel
+  // their plan, with proration handled by Stripe.
   const { portalUrl, loading, error, notReady } = usePortalSession({
     context,
     state,
     appKey,
   });
 
-  const hasPlans = (state?.plans?.length ?? 0) > 0;
   const onPaidPlan = !!state?.entitlement?.plan;
 
+  // PAID: do NOT show the plan picker. The picker's "Choose" starts a NEW Stripe
+  // Checkout subscription — clicking another tier would create a SECOND
+  // subscription (double-bill), not switch in place. Plan changes (upgrade/
+  // downgrade/cancel) go through the Stripe Customer Portal, which swaps the
+  // subscription item with proration. So on a paid plan we show the meter + a
+  // "Manage subscription" portal link only. (Matches toast/sparkfly.)
+  if (onPaidPlan) {
+    return (
+      <Flex direction="column" gap="medium">
+        <CreditMeter
+          entitlement={state?.entitlement}
+          creditMeter={state?.credit_meter}
+        />
+        {!notReady &&
+          (error ? (
+            <Alert title="Couldn't open billing" variant="danger">
+              <Text>{error}</Text>
+            </Alert>
+          ) : (
+            <LoadingButton
+              href={portalUrl ? { url: portalUrl, external: true } : undefined}
+              loading={loading}
+              disabled={!portalUrl}
+              variant="primary"
+            >
+              {portalUrl ? "Manage subscription" : "Preparing billing…"}
+            </LoadingButton>
+          ))}
+        <Text format={{ fontStyle: "italic" }}>
+          Change or cancel your plan in Stripe — billing is managed across all
+          Growth Operations apps.
+        </Text>
+      </Flex>
+    );
+  }
+
+  // FREE tier: show the upgrade path (PlanGrid → first-paid Checkout). PlanGrid
+  // renders nothing if no plans are mirrored yet, so fall back to a portal CTA
+  // then so the tab isn't empty.
+  const hasPlans = (state?.plans?.length ?? 0) > 0;
   return (
     <Flex direction="column" gap="medium">
       <CreditMeter
         entitlement={state?.entitlement}
         creditMeter={state?.credit_meter}
       />
-
-      {/* The dynamically-rendered upgrade path (tiers from the Stripe catalog).
-          Renders nothing if no plans are mirrored yet. */}
       <PlanGrid context={context} state={state} appKey={appKey} />
-
-      {/* Manage-billing link: relevant once the customer is on a paid plan
-          (change/cancel/invoices in Stripe). Hidden in the not-ready
-          (un-provisioned) state. When no plans are mirrored AND not on a paid
-          plan, fall back to the portal as the only CTA so the tab isn't empty. */}
-      {!notReady && (onPaidPlan || !hasPlans) &&
+      {!notReady && !hasPlans &&
         (error ? (
           <Alert title="Couldn't open billing" variant="danger">
             <Text>{error}</Text>
@@ -323,19 +353,11 @@ function CreditsBilling({ context, state, appKey }) {
             href={portalUrl ? { url: portalUrl, external: true } : undefined}
             loading={loading}
             disabled={!portalUrl}
-            variant={onPaidPlan ? "secondary" : "primary"}
+            variant="primary"
           >
-            {portalUrl
-              ? onPaidPlan
-                ? "Manage billing in Stripe"
-                : "Buy credits in Stripe"
-              : "Preparing billing…"}
+            {portalUrl ? "Buy credits in Stripe" : "Preparing billing…"}
           </LoadingButton>
         ))}
-
-      {/* Footer note only when PlanGrid isn't rendering one (PlanGrid owns the
-          canonical "managed in Stripe" line when plans are present — avoid
-          showing it twice). */}
       {!hasPlans && (
         <Text format={{ fontStyle: "italic" }}>
           Billing is managed in Stripe across all Growth Operations apps.
