@@ -24,6 +24,9 @@ export { AlertsTab } from "./alerts/AlertsTab";
 // Usage — the shared credit usage view (per-day LineChart + window stats).
 export { UsageTab } from "./usage/UsageTab";
 
+// Sandbox — the shared "Install on a sandbox" action (mints a signed link).
+export { SandboxInstall } from "./sandbox/SandboxInstall";
+
 // Lib helpers.
 export {
   fmtDate,
