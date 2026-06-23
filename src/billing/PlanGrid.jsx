@@ -34,9 +34,14 @@ import { fmtMoney } from "../lib/format";
 // feature bullets, and a CTA: "Current" (disabled) for the active tier,
 // "Contact sales" for talk_to_sales tiers, else "Choose" which pre-creates a
 // checkout session for that tier's price in the selected interval.
+//
+// The Monthly/Annual toggle is PER CARD (not a single grid-wide switch): a tier
+// may offer one interval and not the other (e.g. a top tier that's monthly-only),
+// so each card owns its own interval state and only shows the toggle when it has
+// BOTH legs. A subscription still bills on one cadence — the cadence bought is
+// whatever this card's toggle shows when its "Choose" is clicked.
 function PlanCard({
   plan,
-  interval,
   billingBaseUrl,
   appKey,
   portalId,
@@ -44,6 +49,12 @@ function PlanCard({
   supportUrl,
   maxFeatures = 0,
 }) {
+  // Default this card to annual when it offers annual (cheaper-per-month story);
+  // monthly-only tiers default to monthly. Both legs → show the toggle.
+  const hasMonthly = !!plan.monthly;
+  const hasAnnual = !!plan.annual;
+  const canToggle = hasMonthly && hasAnnual;
+  const [interval, setInterval] = useState(hasAnnual ? "annual" : "monthly");
   const leg = interval === "annual" ? plan.annual : plan.monthly;
   const periodLabel = interval === "annual" ? "/yr" : "/mo";
 
@@ -52,6 +63,17 @@ function PlanCard({
     : leg
       ? `${fmtMoney(leg.unit_amount, leg.currency)}${periodLabel}`
       : "Free";
+
+  // Annual savings vs. paying monthly for a year. Only when this card is showing
+  // annual AND has both legs to compare. annualFull = the struck-through "12×
+  // monthly" reference price; pct = the highlighted discount.
+  const showAnnualSavings =
+    interval === "annual" && hasMonthly && hasAnnual && plan.annual?.unit_amount;
+  const annualFull = showAnnualSavings ? plan.monthly.unit_amount * 12 : null;
+  const savingsPct =
+    showAnnualSavings && annualFull > plan.annual.unit_amount
+      ? Math.round((1 - plan.annual.unit_amount / annualFull) * 100)
+      : 0;
 
   // Direct one-click checkout link to the billing service's redirect endpoint.
   // Null until we have everything (billing host, appKey, portal, this interval's
@@ -85,7 +107,33 @@ function PlanCard({
           )}
         </Flex>
 
-        <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
+        <Flex direction="row" gap="small" align="center">
+          <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
+          {savingsPct > 0 && (
+            <StatusTag variant="success">Save {savingsPct}%</StatusTag>
+          )}
+        </Flex>
+        {/* Struck-through "12× monthly" reference so the annual discount reads. */}
+        {savingsPct > 0 && (
+          <Text format={{ lineDecoration: "strikethrough", fontStyle: "italic" }}>
+            {fmtMoney(annualFull, plan.annual.currency)}/yr
+          </Text>
+        )}
+
+        {/* Per-card interval toggle — only when this tier offers both legs. */}
+        {canToggle && (
+          <ToggleGroup
+            name={`billing-interval-${plan.tier}`}
+            toggleType="radioButtonList"
+            inline={true}
+            value={interval}
+            onChange={(v) => v && setInterval(v)}
+            options={[
+              { label: "Monthly", value: "monthly" },
+              { label: "Annual", value: "annual" },
+            ]}
+          />
+        )}
 
         {plan.credits_per_period != null && (
           <Text>{plan.credits_per_period.toLocaleString()} credits / month</Text>
@@ -137,11 +185,6 @@ function PlanCard({
 
 export function PlanGrid({ context, state, appKey }) {
   const plans = state?.plans ?? [];
-  // Default to annual only if EVERY paid plan offers it; else monthly.
-  const paid = plans.filter((p) => !p.talk_to_sales && (p.monthly || p.annual));
-  const annualAvailable =
-    paid.length > 0 && paid.every((p) => p.annual);
-  const [interval, setInterval] = useState(annualAvailable ? "annual" : "monthly");
 
   if (plans.length === 0) return null;
 
@@ -162,31 +205,16 @@ export function PlanGrid({ context, state, appKey }) {
 
   return (
     <Flex direction="column" gap="medium">
-      <Flex direction="row" gap="medium" align="center" justify="start">
-        <Heading>Plans</Heading>
-        {annualAvailable && (
-          <ToggleGroup
-            name="billing-interval"
-            toggleType="radioButtonList"
-            inline={true}
-            value={interval}
-            onChange={(v) => v && setInterval(v)}
-            options={[
-              { label: "Monthly", value: "monthly" },
-              { label: "Annual", value: "annual" },
-            ]}
-          />
-        )}
-      </Flex>
+      <Heading>Plans</Heading>
 
       {/* AutoGrid(flexible): equal-width columns that wrap responsively. Card
-          height is equalized via the maxFeatures padding in PlanCard. */}
+          height is equalized via the maxFeatures padding in PlanCard. Each card
+          owns its own Monthly/Annual toggle (see PlanCard). */}
       <AutoGrid columnWidth={240} flexible={true} gap="medium">
         {plans.map((plan) => (
           <PlanCard
             key={plan.tier}
             plan={plan}
-            interval={interval}
             billingBaseUrl={billingBaseUrl}
             appKey={appKey}
             portalId={portalId}
