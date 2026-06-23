@@ -163,12 +163,17 @@ export function PlanGrid({ context, state, appKey }) {
 
       // hubspot.fetch: body is a plain OBJECT (not a JSON string); only
       // Authorization survives as a header — don't set Content-Type.
+      // presentation:"hosted" — a UI extension runs in a sandboxed iframe and
+      // can't mount Stripe's EMBEDDED checkout (no Stripe.js, nested-iframe 3DS
+      // fails), so request the HOSTED page and open its URL externally. The
+      // embedded default returns a client_secret (no url) → "No checkout URL".
       const res = await hubspot.fetch(`${base}/v1/billing/checkout`, {
         method: "POST",
         body: {
           app_key: appKey,
           portal_id: String(portalId),
           price_id: leg.price_id,
+          presentation: "hosted",
           return_url: returnUrl,
         },
       });
