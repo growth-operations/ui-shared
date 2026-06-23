@@ -333,9 +333,14 @@ function CreditsBilling({ context, state, appKey }) {
           </LoadingButton>
         ))}
 
-      <Text format={{ fontStyle: "italic" }}>
-        Billing is managed in Stripe across all Growth Operations apps.
-      </Text>
+      {/* Footer note only when PlanGrid isn't rendering one (PlanGrid owns the
+          canonical "managed in Stripe" line when plans are present — avoid
+          showing it twice). */}
+      {!hasPlans && (
+        <Text format={{ fontStyle: "italic" }}>
+          Billing is managed in Stripe across all Growth Operations apps.
+        </Text>
+      )}
     </Flex>
   );
 }
