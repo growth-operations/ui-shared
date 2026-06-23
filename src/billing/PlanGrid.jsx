@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   hubspot,
   Flex,
+  Box,
   Tile,
   Text,
   Heading,
@@ -49,23 +50,33 @@ function PlanCard({ plan, interval, onChoose, choosing, checkoutUrl, supportUrl 
 
   return (
     <Tile>
-      <Flex direction="column" gap="small">
-        <Flex direction="row" gap="small" align="center">
-          <Heading>{plan.name ?? plan.tier}</Heading>
-          {plan.current && <StatusTag variant="success">Current plan</StatusTag>}
-        </Flex>
+      {/* Full-height column: the content Box grows to fill so the CTA always
+          pins to the bottom, aligned across cards (the row stretches them to
+          equal height). Otherwise the button floats up under shorter feature
+          lists and the cards look ragged. */}
+      <Flex direction="column" gap="small" align="stretch">
+        <Box flex={1}>
+          <Flex direction="column" gap="small">
+            <Flex direction="row" gap="small" align="center">
+              <Heading>{plan.name ?? plan.tier}</Heading>
+              {plan.current && (
+                <StatusTag variant="success">Current plan</StatusTag>
+              )}
+            </Flex>
 
-        <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
+            <Text format={{ fontWeight: "bold", fontSize: "lg" }}>{priceText}</Text>
 
-        {plan.credits_per_period != null && (
-          <Text>
-            {plan.credits_per_period.toLocaleString()} credits / month
-          </Text>
-        )}
+            {plan.credits_per_period != null && (
+              <Text>
+                {plan.credits_per_period.toLocaleString()} credits / month
+              </Text>
+            )}
 
-        {(plan.features ?? []).map((f, i) => (
-          <Text key={i}>• {f}</Text>
-        ))}
+            {(plan.features ?? []).map((f, i) => (
+              <Text key={i}>• {f}</Text>
+            ))}
+          </Flex>
+        </Box>
 
         {/* CTA. Current tier => disabled marker. talk_to_sales => contact link.
             Otherwise pre-create-then-link checkout for the selected interval. */}
