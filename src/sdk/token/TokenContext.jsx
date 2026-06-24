@@ -20,13 +20,17 @@ const TokenContext = createContext(null);
 let cachedTokenData = null;
 let tokenPromise = null;
 let appContext = null;
+// The short-lived-token endpoint. Defaults to the /api/v1 mount (toast/sparkfly);
+// apps mounted at /v1 (e.g. ATS) pass tokenPath="/v1/tokens/short-lived" to
+// TokenProvider. Same per-app override pattern as makeSettingsApi / AlertsTab.
+let tokenPath = "/api/v1/tokens/short-lived";
 
 // Fetch the full short-lived token object (token string + expires_at) for the
 // current portal.
 async function fetchTokenData(context) {
   const portalId = context?.portal?.id;
   const query = portalId ? `?portalId=${portalId}` : "";
-  return callAppApi(context, `/api/v1/tokens/short-lived${query}`, "GET");
+  return callAppApi(context, `${tokenPath}${query}`, "GET");
 }
 
 // Return a valid access token string, fetching a fresh one if the cache is empty
@@ -76,10 +80,12 @@ export function useToken() {
   return context;
 }
 
-export function TokenProvider({ children, context }) {
+export function TokenProvider({ children, context, tokenPath: path }) {
   // Stash the extension context at module level so the token functions (which
   // live outside React) can reach it.
   appContext = context;
+  // Per-app override for the short-lived-token endpoint (apps mounted at /v1).
+  if (path) tokenPath = path;
 
   return (
     <TokenContext.Provider value={stableValue}>{children}</TokenContext.Provider>
