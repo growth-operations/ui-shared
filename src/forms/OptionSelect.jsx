@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Select, LoadingSpinner, Alert, Flex, Text } from "@hubspot/ui-extensions";
+import { Select, LoadingSpinner, Alert, Flex, Text, Link } from "@hubspot/ui-extensions";
 import { useToken } from "../sdk/index";
 import { getForms } from "../sdk/hubspot/forms";
 import { getLists } from "../sdk/hubspot/lists";
@@ -55,6 +55,12 @@ export function OptionSelect({
   label = "Select",
   description,
   placeholder = "Choose…",
+  // Optional action links rendered beside the dropdown (e.g. "Create new list",
+  // "Edit form") — the affordances the per-app FormSelector/SegmentSelector used
+  // to have. Each: { label, url }. Rendered as external links (new tab). When a
+  // url is null/absent the link is skipped, so callers can pass an "Edit" action
+  // gated on a selected value.
+  actions = [],
   // Extra source args (pipelineId/objectType for pipelineStages, query for lists)
   ...opts
 }) {
@@ -100,6 +106,8 @@ export function OptionSelect({
     );
   }
 
+  const actionLinks = (actions || []).filter((a) => a && a.url);
+
   return (
     <Flex direction="column" gap="extra-small">
       <Select
@@ -110,6 +118,15 @@ export function OptionSelect({
         value={value ?? ""}
         onChange={(v) => onChange?.(v)}
       />
+      {actionLinks.length > 0 && (
+        <Flex direction="row" gap="small">
+          {actionLinks.map((a) => (
+            <Link key={a.label} href={{ url: a.url, external: true }}>
+              {a.label}
+            </Link>
+          ))}
+        </Flex>
+      )}
     </Flex>
   );
 }
