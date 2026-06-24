@@ -27,6 +27,9 @@ export { UsageTab } from "./usage/UsageTab";
 // Sandbox — the shared "Install on a sandbox" action (mints a signed link).
 export { SandboxInstall } from "./sandbox/SandboxInstall";
 
+// Forms — shared HubSpot-options dropdown (forms/lists/pipeline-stages picker).
+export { OptionSelect } from "./forms/OptionSelect";
+
 // Lib helpers.
 export {
   fmtDate,
