@@ -180,21 +180,22 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 
-  // Upgrade-only tier picker — shown ONLY while trialing (the lifecycle: trial
-  // starts on the entry tier at install; while trialing the customer may upgrade
-  // to a higher tier; once active, plan changes go through support, so no picker).
-  // The cards target /v1/billing/upgrade/start (swap the trialing sub's item, no
-  // new sub). "Higher tiers" = plans ranked above the current tier by tier_order;
-  // the backend stamps Plan.current on the account's tier.
+  // Tier picker — shown ONLY while trialing (the lifecycle: trial starts on the
+  // entry tier at install; while trialing the customer may upgrade to a higher
+  // tier in-app; once active, plan changes go through support). We show the FULL
+  // ladder for context so the customer sees where they sit:
+  //   current tier  -> "Current plan" (disabled marker; PlanCard keys off
+  //                    plan.current, stamped server-side on the account's tier).
+  //   higher tiers  -> the actionable upgrade (CTA targets /v1/billing/upgrade/
+  //                    start, swapping the trialing sub's item — no new sub).
+  //   lower tiers   -> shown disabled with a Talk-to-sales CTA (downgrades aren't
+  //                    self-serve). PlanCard derives this from currentOrder.
   const isTrialing = ent.status === "trialing";
   const plans = state?.plans ?? [];
   const currentOrder = plans.find((p) => p.current)?.tier_order;
-  const upgradePlans =
-    isTrialing && currentOrder != null
-      ? plans.filter(
-          (p) => !p.talk_to_sales && p.tier_order != null && p.tier_order > currentOrder
-        )
-      : [];
+  // Render the picker only while trialing AND once we know the current tier
+  // (currentOrder drives upgrade-vs-downgrade per card).
+  const showPicker = isTrialing && currentOrder != null && plans.length > 0;
 
   return (
     <Flex direction="column" gap="medium">
@@ -215,19 +216,22 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
         link above to update your plan, payment method, or view invoices.
       </Text>
 
-      {/* Trial-only upgrade path. Hidden once active (no plans pass the filter
-          when not trialing). Upgrading swaps the trialing sub onto the higher
-          tier, keeping the trial end date. */}
-      {upgradePlans.length > 0 && (
+      {/* Trial-only tier ladder: current (marked), higher (upgradeable), lower
+          (disabled, Talk-to-sales). Hidden once active. Upgrading swaps the
+          trialing sub onto the higher tier, keeping the trial end date. The full
+          `plans` list is passed; PlanCard decides each card's state from
+          plan.current + currentOrder. */}
+      {showPicker && (
         <PlanGrid
           context={context}
           state={state}
           appKey={appKey}
-          plans={upgradePlans}
+          plans={plans}
+          currentOrder={currentOrder}
           endpoint="upgrade/start"
           ctaLabel="Upgrade to"
-          heading="Upgrade your plan"
-          footnote="Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts."
+          heading="Your plan"
+          footnote="Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
         />
       )}
     </Flex>

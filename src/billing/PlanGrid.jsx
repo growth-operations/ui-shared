@@ -54,12 +54,29 @@ function PlanCard({
   // to this tier (the trial-archetype in-app upgrade) — no new sub.
   endpoint = "checkout/start",
   ctaLabel = "Choose",
+  // Trial-picker only: tier_order of the customer's current tier. When set, a
+  // card ranked BELOW it is a downgrade — shown for context but not self-serve
+  // (downgrades go through support), so it renders disabled with a Talk-to-sales
+  // CTA. Cards ranked ABOVE are upgrades (the normal CTA). null/undefined => the
+  // credit first-purchase grid, where this relation doesn't apply.
+  currentOrder = null,
 }) {
   // Default this card to annual when it offers annual (cheaper-per-month story);
   // monthly-only tiers default to monthly. Both legs → show the toggle.
   const hasMonthly = !!plan.monthly;
   const hasAnnual = !!plan.annual;
-  const canToggle = hasMonthly && hasAnnual;
+  // A lower-ranked tier than the customer's current one: a downgrade. Not
+  // self-serve (changes go through support) — show it for context, disabled,
+  // with a Talk-to-sales CTA. Only meaningful in the trial picker (currentOrder
+  // set); never flag the current tier itself as a downgrade.
+  const isDowngrade =
+    currentOrder != null &&
+    !plan.current &&
+    plan.tier_order != null &&
+    plan.tier_order < currentOrder;
+  // The interval toggle is only useful when the card can be acted on; a current
+  // or downgrade card is read-only, so hide its toggle.
+  const canToggle = hasMonthly && hasAnnual && !plan.current && !isDowngrade;
   const [interval, setInterval] = useState(hasAnnual ? "annual" : "monthly");
   const leg = interval === "annual" ? plan.annual : plan.monthly;
   const periodLabel = interval === "annual" ? "/yr" : "/mo";
@@ -152,10 +169,20 @@ function PlanCard({
           <Text key={`pad-${i}`}>{" "}</Text>
         ))}
 
-        {/* CTA. Current tier => disabled marker. talk_to_sales => contact link.
-            Otherwise pre-create-then-link checkout for the selected interval. */}
+        {/* CTA. Current tier => disabled marker. Downgrade (lower than current,
+            trial picker) => disabled + Talk-to-sales (not self-serve).
+            talk_to_sales tier => contact link. Otherwise pre-create-then-link
+            checkout/upgrade for the selected interval. */}
         {plan.current ? (
           <Button disabled>Current plan</Button>
+        ) : isDowngrade ? (
+          <Button
+            href={supportUrl ? { url: supportUrl, external: true } : undefined}
+            disabled={!supportUrl}
+            variant="secondary"
+          >
+            Talk to sales to switch
+          </Button>
         ) : plan.talk_to_sales ? (
           <Button
             href={supportUrl ? { url: supportUrl, external: true } : undefined}
@@ -202,6 +229,9 @@ export function PlanGrid({
   ctaLabel = "Choose",
   heading = "Plans",
   footnote = "Billing is managed in Stripe across all Growth Operations apps. Your new credits are added as soon as payment completes.",
+  // Trial-picker only: tier_order of the current tier, so cards below it render
+  // as disabled downgrades (Talk-to-sales). Omitted for the credit grid.
+  currentOrder = null,
 }) {
   const plans = plansOverride ?? state?.plans ?? [];
 
@@ -242,6 +272,7 @@ export function PlanGrid({
             maxFeatures={maxFeatures}
             endpoint={endpoint}
             ctaLabel={ctaLabel}
+            currentOrder={currentOrder}
           />
         ))}
       </AutoGrid>
