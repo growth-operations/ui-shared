@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import React from "react";
 import {
-  hubspot,
   Flex,
   Heading,
   Text,
@@ -9,7 +8,6 @@ import {
   Button,
   Alert,
 } from "@hubspot/ui-extensions";
-import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { fmtDate, daysUntil } from "../lib/format";
 import { CreditMeter } from "../home/CreditMeter";
 import { PlanGrid } from "./PlanGrid";
@@ -140,106 +138,14 @@ function StatusPanel({ entitlement }) {
   );
 }
 
-// Pre-creates a Stripe Customer Portal session on mount (in-iframe POST) and
-// returns { portalUrl, loading, error, notReady }. Used by the TRIAL arm only —
-// the credits arm builds a direct /v1/billing/portal/start link instead (no
-// in-iframe fetch, avoiding the billing service's cold-start timeout).
-function usePortalSession({ context, state, appKey }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [portalUrl, setPortalUrl] = useState(null);
-  // "Not ready" = the install hasn't been provisioned with a Stripe customer
-  // yet (fresh/old account: no entitlement.status, or the portal endpoint 409s
-  // with "no Stripe customer"). That's an expected pre-purchase state, not an
-  // error — the UI shows a calm "finish setup" message instead of a red alert.
-  const [notReady, setNotReady] = useState(false);
-
-  // Pre-create on mount so the link is one real click (Stripe can't be iframed;
-  // UI Extensions have no open-URL action — only Link, whose href must exist
-  // before render).
-  useStrictModeEffect(
-    async ({ mounted, resetOnUnmount }) => {
-      // `state` is the /v1/home payload, fetched async by the host page — it's
-      // null on the first render(s). Don't mistake "not loaded yet" for
-      // "misconfigured": stay in loading until state arrives, then decide.
-      // IMPORTANT: useStrictModeEffect latches an internal fetchedRef on any
-      // normal completion, so a bare `return` here would block the re-run when
-      // state later arrives (→ spinner forever). resetOnUnmount() clears that
-      // ref so the deps-change re-run (state?.billing_base_url) actually fires.
-      if (!state) {
-        resetOnUnmount();
-        return;
-      }
-      // No Stripe customer yet → don't even try to open a portal. A trial
-      // install that hasn't been provisioned (no entitlement, or status null/
-      // not_installed) has nothing to manage; show the calm "not ready" state.
-      const status = state?.entitlement?.status;
-      if (!state.entitlement || status == null || status === "not_installed") {
-        if (mounted.current) {
-          setNotReady(true);
-          setLoading(false);
-        }
-        return;
-      }
-      try {
-        const base = state.billing_base_url;
-        if (!base) throw new Error("Billing service not configured");
-        if (!appKey) throw new Error("Missing appKey for billing portal");
-        const portalId = context?.portal?.id;
-
-        // Return to THIS app's Billing page after Stripe (named app-page deep
-        // link /app/{portalId}/{appId}/{pagePath}); fall back to HubSpot home.
-        const returnUrl = state?.app_id
-          ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
-          : "https://app.hubspot.com/";
-
-        // hubspot.fetch: body must be a plain OBJECT (HubSpot serializes it),
-        // NOT a JSON string, and only Authorization survives as a header —
-        // do not set Content-Type or any other header.
-        const res = await hubspot.fetch(`${base}/v1/billing/portal`, {
-          method: "POST",
-          body: {
-            app_key: appKey,
-            portal_id: String(portalId),
-            return_url: returnUrl,
-          },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          // 409 "no Stripe customer yet" is the not-provisioned case, not a
-          // failure — surface it as the calm not-ready state.
-          if (res.status === 409 && /no stripe customer/i.test(text)) {
-            if (mounted.current) setNotReady(true);
-          } else {
-            throw new Error(`Billing portal request failed (${res.status}): ${text}`);
-          }
-        } else {
-          const { url } = await res.json();
-          if (!url) throw new Error("No billing portal URL returned");
-          if (mounted.current) setPortalUrl(url);
-        }
-      } catch (perr) {
-        if (mounted.current) setError(String(perr));
-      } finally {
-        if (mounted.current) setLoading(false);
-      }
-    },
-    [context, appKey, state?.billing_base_url, state?.app_id, state?.entitlement?.status]
-  );
-
-  return { portalUrl, loading, error, notReady };
-}
-
 function TrialSubscriptionBilling({ context, state, appKey }) {
-  const { portalUrl, loading, error, notReady } = usePortalSession({
-    context,
-    state,
-    appKey,
-  });
+  const ent = state?.entitlement;
 
   // Install not provisioned with a Stripe customer yet — calm "finish setup"
-  // state, not a red error. (Old/stale installs, or before the install flow's
-  // provision_trial_install has run.)
+  // state, not a red error. (Old/stale installs, or before provision_trial_install
+  // has run.) The trial arm has a `status`; not_installed / missing means
+  // un-provisioned.
+  const notReady = !ent || ent.status == null || ent.status === "not_installed";
   if (notReady) {
     return (
       <Flex direction="column" gap="medium">
@@ -255,26 +161,36 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
     );
   }
 
+  // Direct external link to GET /v1/billing/portal/start — resolves the customer
+  // + creates the Customer Portal session server-side and 303s to Stripe IN THE
+  // OPENED TAB. No in-iframe portal-session fetch (that round trip hit the billing
+  // service's cold-start/CPU stall → the iframe's 15s "Gateway took too long").
+  // Same pattern as the credits arm + PlanGrid's /checkout/start. null (button
+  // disabled) until billing_base_url is known.
+  const base = state?.billing_base_url ?? null;
+  const portalId = context?.portal?.id;
+  const returnUrl = state?.app_id
+    ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
+    : "https://app.hubspot.com/";
+  const portalStartUrl =
+    base && appKey && portalId
+      ? `${base}/v1/billing/portal/start` +
+        `?app_key=${encodeURIComponent(appKey)}` +
+        `&portal_id=${encodeURIComponent(String(portalId))}` +
+        `&return_url=${encodeURIComponent(returnUrl)}`
+      : null;
+
   return (
     <Flex direction="column" gap="medium">
-      {/* PRIMARY CTA at the very top, large and obvious (per billing feedback).
-          A Button with href navigates to the portal (Button supports href +
-          external) so it reads as a real button, not a text link; LoadingButton
-          shows the prepared/loading state inline. */}
-      {error ? (
-        <Alert title="Couldn't open billing" variant="danger">
-          <Text>{error}</Text>
-        </Alert>
-      ) : (
-        <LoadingButton
-          href={portalUrl ? { url: portalUrl, external: true } : undefined}
-          loading={loading}
-          disabled={!portalUrl}
-          variant="primary"
-        >
-          {portalUrl ? "Manage billing in Stripe" : "Preparing billing…"}
-        </LoadingButton>
-      )}
+      {/* PRIMARY CTA at the top. Direct external link to the billing-service
+          redirect (opens a new tab); no in-iframe pre-create fetch. */}
+      <LoadingButton
+        href={portalStartUrl ? { url: portalStartUrl, external: true } : undefined}
+        disabled={!portalStartUrl}
+        variant="primary"
+      >
+        {portalStartUrl ? "Manage billing in Stripe" : "Preparing billing…"}
+      </LoadingButton>
 
       <StatusPanel entitlement={state?.entitlement} />
 
