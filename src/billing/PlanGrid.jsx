@@ -48,6 +48,12 @@ function PlanCard({
   returnUrl,
   supportUrl,
   maxFeatures = 0,
+  // Billing-service redirect the "Choose" button targets. "checkout/start" (the
+  // default) starts a NEW subscription via hosted Checkout — for free/credit
+  // first purchase. "upgrade/start" swaps the EXISTING trialing/active sub's item
+  // to this tier (the trial-archetype in-app upgrade) — no new sub.
+  endpoint = "checkout/start",
+  ctaLabel = "Choose",
 }) {
   // Default this card to annual when it offers annual (cheaper-per-month story);
   // monthly-only tiers default to monthly. Both legs → show the toggle.
@@ -80,7 +86,7 @@ function PlanCard({
   // price) — the button is disabled until then.
   const startUrl =
     billingBaseUrl && appKey && portalId && leg?.price_id
-      ? `${billingBaseUrl}/v1/billing/checkout/start` +
+      ? `${billingBaseUrl}/v1/billing/${endpoint}` +
         `?app_key=${encodeURIComponent(appKey)}` +
         `&portal_id=${encodeURIComponent(portalId)}` +
         `&price_id=${encodeURIComponent(leg.price_id)}` +
@@ -175,7 +181,7 @@ function PlanCard({
             disabled={!startUrl}
             variant="primary"
           >
-            Choose {plan.name ?? plan.tier}
+            {ctaLabel} {plan.name ?? plan.tier}
           </Button>
         )}
       </Flex>
@@ -183,8 +189,21 @@ function PlanCard({
   );
 }
 
-export function PlanGrid({ context, state, appKey }) {
-  const plans = state?.plans ?? [];
+export function PlanGrid({
+  context,
+  state,
+  appKey,
+  // Customization for non-default uses. The credit-app first-purchase grid uses
+  // all defaults; the trial-archetype in-app UPGRADE picker passes:
+  //   plans={higherTiersOnly}  endpoint="upgrade/start"  ctaLabel="Upgrade to"
+  //   heading="Upgrade your plan"  footnote={trial copy}
+  plans: plansOverride,
+  endpoint = "checkout/start",
+  ctaLabel = "Choose",
+  heading = "Plans",
+  footnote = "Billing is managed in Stripe across all Growth Operations apps. Your new credits are added as soon as payment completes.",
+}) {
+  const plans = plansOverride ?? state?.plans ?? [];
 
   if (plans.length === 0) return null;
 
@@ -205,7 +224,7 @@ export function PlanGrid({ context, state, appKey }) {
 
   return (
     <Flex direction="column" gap="medium">
-      <Heading>Plans</Heading>
+      <Heading>{heading}</Heading>
 
       {/* AutoGrid(flexible): equal-width columns that wrap responsively. Card
           height is equalized via the maxFeatures padding in PlanCard. Each card
@@ -221,14 +240,13 @@ export function PlanGrid({ context, state, appKey }) {
             returnUrl={returnUrl}
             supportUrl={supportUrl}
             maxFeatures={maxFeatures}
+            endpoint={endpoint}
+            ctaLabel={ctaLabel}
           />
         ))}
       </AutoGrid>
 
-      <Text format={{ fontStyle: "italic" }}>
-        Billing is managed in Stripe across all Growth Operations apps. Your new
-        credits are added as soon as payment completes.
-      </Text>
+      <Text format={{ fontStyle: "italic" }}>{footnote}</Text>
     </Flex>
   );
 }

@@ -180,6 +180,22 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 
+  // Upgrade-only tier picker — shown ONLY while trialing (the lifecycle: trial
+  // starts on the entry tier at install; while trialing the customer may upgrade
+  // to a higher tier; once active, plan changes go through support, so no picker).
+  // The cards target /v1/billing/upgrade/start (swap the trialing sub's item, no
+  // new sub). "Higher tiers" = plans ranked above the current tier by tier_order;
+  // the backend stamps Plan.current on the account's tier.
+  const isTrialing = ent.status === "trialing";
+  const plans = state?.plans ?? [];
+  const currentOrder = plans.find((p) => p.current)?.tier_order;
+  const upgradePlans =
+    isTrialing && currentOrder != null
+      ? plans.filter(
+          (p) => !p.talk_to_sales && p.tier_order != null && p.tier_order > currentOrder
+        )
+      : [];
+
   return (
     <Flex direction="column" gap="medium">
       {/* PRIMARY CTA at the top. Direct external link to the billing-service
@@ -198,6 +214,22 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
         Billing is managed in Stripe across all Growth Operations apps. Use the
         link above to update your plan, payment method, or view invoices.
       </Text>
+
+      {/* Trial-only upgrade path. Hidden once active (no plans pass the filter
+          when not trialing). Upgrading swaps the trialing sub onto the higher
+          tier, keeping the trial end date. */}
+      {upgradePlans.length > 0 && (
+        <PlanGrid
+          context={context}
+          state={state}
+          appKey={appKey}
+          plans={upgradePlans}
+          endpoint="upgrade/start"
+          ctaLabel="Upgrade to"
+          heading="Upgrade your plan"
+          footnote="Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts."
+        />
+      )}
     </Flex>
   );
 }
