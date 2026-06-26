@@ -346,6 +346,20 @@ function LegacyBilling({ state }) {
   );
 }
 
+function CompedBilling() {
+  return (
+    <Alert variant="success">
+      <Flex direction="column" gap="extra-small">
+        <Text format={{ fontWeight: "bold" }}>Free access</Text>
+        <Text>
+          Your account has been granted complimentary access as a Growth Operations partner or
+          team member. No payment method or subscription is required.
+        </Text>
+      </Flex>
+    </Alert>
+  );
+}
+
 export function BillingTab({ context, state, appKey, openIframe = null }) {
   const mode = state?.entitlement?.mode;
 
@@ -356,6 +370,8 @@ export function BillingTab({ context, state, appKey, openIframe = null }) {
         <LegacyBilling state={state} />
       ) : mode === "credits" ? (
         <CreditsBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
+      ) : mode === "comped" ? (
+        <CompedBilling />
       ) : (
         <TrialSubscriptionBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
       )}

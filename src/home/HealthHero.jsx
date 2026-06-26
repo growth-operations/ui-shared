@@ -50,6 +50,17 @@ export function HealthHero({ appName, state }) {
     ) : null;
   }
 
+  if (ent.mode === "comped") {
+    return (
+      <Flex direction="column" gap="small">
+        {name && <Heading>{name}</Heading>}
+        <Alert title="Free access" variant="success">
+          <Text>Partner or team member access — no subscription required.</Text>
+        </Alert>
+      </Flex>
+    );
+  }
+
   if (ent.mode === "credits") {
     const remaining = ent.remaining ?? 0;
     const depleted = ent.depleted === true || remaining <= 0;
