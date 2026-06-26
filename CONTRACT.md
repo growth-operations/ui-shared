@@ -95,7 +95,13 @@ contract serves all archetypes; components branch on `entitlement.mode`.
 
   // Deep-link plumbing — common.
   "billing_base_url": "https://billing.growth-operations.com",
-  "app_id": "31489633"
+  "app_id": "31489633",
+
+  // USER — injected by the backend using the HubSpot userId query param (auto-sent
+  // by hubspot.fetch on every call). Gates admin-only UI like the Billing tab.
+  "user": {
+    "is_super_admin": true
+  }
 }
 ```
 

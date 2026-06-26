@@ -362,11 +362,16 @@ function CompedBilling() {
 
 export function BillingTab({ context, state, appKey, openIframe = null }) {
   const mode = state?.entitlement?.mode;
+  const isSuperAdmin = state?.user?.is_super_admin === true;
 
   return (
     <Flex direction="column" gap="medium">
       <Heading>Billing</Heading>
-      {mode === "legacy" ? (
+      {!isSuperAdmin ? (
+        <Alert variant="warning" title="Access restricted">
+          <Text>Billing settings are only available to super admins.</Text>
+        </Alert>
+      ) : mode === "legacy" ? (
         <LegacyBilling state={state} />
       ) : mode === "credits" ? (
         <CreditsBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
