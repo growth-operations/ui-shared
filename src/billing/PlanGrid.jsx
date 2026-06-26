@@ -60,6 +60,13 @@ function PlanCard({
   // CTA. Cards ranked ABOVE are upgrades (the normal CTA). null/undefined => the
   // credit first-purchase grid, where this relation doesn't apply.
   currentOrder = null,
+  // actions.openIframeModal from the card root (threaded BillingTab → PlanGrid).
+  // When present, a talk_to_sales tier with plan.meetings_url opens the meetings
+  // scheduler in an IN-CARD modal (the Anvil "Meet with Andrew" experience).
+  // Absent (or no meetings_url) → fall back to a new-tab href. UI Extensions
+  // can't read whether the external meetings page is CSP-frameable, so the modal
+  // is best-effort; the href fallback always works.
+  openIframe = null,
 }) {
   // Default this card to annual when it offers annual (cheaper-per-month story);
   // monthly-only tiers default to monthly. Both legs → show the toggle.
@@ -184,13 +191,39 @@ function PlanCard({
             Talk to sales to switch
           </Button>
         ) : plan.talk_to_sales ? (
-          <Button
-            href={supportUrl ? { url: supportUrl, external: true } : undefined}
-            disabled={!supportUrl}
-            variant="secondary"
-          >
-            Contact sales
-          </Button>
+          // Talk-to-sales tier (e.g. Enterprise+): no price/checkout. If we have
+          // a meetings link AND the openIframeModal action, open the scheduler in
+          // an in-card modal (Anvil "Meet with Andrew"). Otherwise a new-tab href
+          // to the meetings link (preferred) or support page.
+          openIframe && plan.meetings_url ? (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                openIframe({
+                  uri: plan.meetings_url,
+                  title: `Talk to sales — ${plan.name ?? plan.tier}`,
+                  width: 1100,
+                  height: 760,
+                })
+              }
+            >
+              Talk to sales
+            </Button>
+          ) : (
+            <Button
+              href={
+                plan.meetings_url
+                  ? { url: plan.meetings_url, external: true }
+                  : supportUrl
+                    ? { url: supportUrl, external: true }
+                    : undefined
+              }
+              disabled={!plan.meetings_url && !supportUrl}
+              variant="secondary"
+            >
+              Talk to sales
+            </Button>
+          )
         ) : !leg ? (
           // No price for the selected interval (e.g. annual not offered) — guide
           // the customer to the other toggle rather than dead-ending.
@@ -232,6 +265,9 @@ export function PlanGrid({
   // Trial-picker only: tier_order of the current tier, so cards below it render
   // as disabled downgrades (Talk-to-sales). Omitted for the credit grid.
   currentOrder = null,
+  // actions.openIframeModal (from the hosting card root) — lets a talk_to_sales
+  // tier open its meetings_url scheduler in an in-card modal. Optional.
+  openIframe = null,
 }) {
   const plans = plansOverride ?? state?.plans ?? [];
 
@@ -273,6 +309,7 @@ export function PlanGrid({
             endpoint={endpoint}
             ctaLabel={ctaLabel}
             currentOrder={currentOrder}
+            openIframe={openIframe}
           />
         ))}
       </AutoGrid>

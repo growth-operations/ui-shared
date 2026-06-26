@@ -138,7 +138,7 @@ function StatusPanel({ entitlement }) {
   );
 }
 
-function TrialSubscriptionBilling({ context, state, appKey }) {
+function TrialSubscriptionBilling({ context, state, appKey, openIframe = null }) {
   const ent = state?.entitlement;
 
   // Install not provisioned with a Stripe customer yet — calm "finish setup"
@@ -232,13 +232,14 @@ function TrialSubscriptionBilling({ context, state, appKey }) {
           ctaLabel="Upgrade to"
           heading="Your plan"
           footnote="Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
+          openIframe={openIframe}
         />
       )}
     </Flex>
   );
 }
 
-function CreditsBilling({ context, state, appKey }) {
+function CreditsBilling({ context, state, appKey, openIframe = null }) {
   const onPaidPlan = !!state?.entitlement?.plan;
 
   // Direct external link to the billing service's GET /v1/billing/portal/start,
@@ -301,7 +302,7 @@ function CreditsBilling({ context, state, appKey }) {
         entitlement={state?.entitlement}
         creditMeter={state?.credit_meter}
       />
-      <PlanGrid context={context} state={state} appKey={appKey} />
+      <PlanGrid context={context} state={state} appKey={appKey} openIframe={openIframe} />
       {!hasPlans && (
         <LoadingButton
           href={
@@ -345,7 +346,7 @@ function LegacyBilling({ state }) {
   );
 }
 
-export function BillingTab({ context, state, appKey }) {
+export function BillingTab({ context, state, appKey, openIframe = null }) {
   const mode = state?.entitlement?.mode;
 
   return (
@@ -354,9 +355,9 @@ export function BillingTab({ context, state, appKey }) {
       {mode === "legacy" ? (
         <LegacyBilling state={state} />
       ) : mode === "credits" ? (
-        <CreditsBilling context={context} state={state} appKey={appKey} />
+        <CreditsBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
       ) : (
-        <TrialSubscriptionBilling context={context} state={state} appKey={appKey} />
+        <TrialSubscriptionBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
       )}
     </Flex>
   );
