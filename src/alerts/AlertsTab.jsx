@@ -64,6 +64,7 @@ function DefaultAlertRow({
   context,
   alert,
   refresh,
+  onDismissed,
   fetchOptions,
   renderRowActions,
 }) {
@@ -73,7 +74,9 @@ function DefaultAlertRow({
     setDismissing(true);
     try {
       await dismissAlert(context, alert.id, fetchOptions);
-      await refresh();
+      // Optimistically drop just this row from local state — no full re-fetch
+      // of the whole alert list on every dismiss.
+      onDismissed(alert.id);
     } finally {
       setDismissing(false);
     }
@@ -161,6 +164,14 @@ export function AlertsTab({
     }
   };
 
+  // Optimistically remove a dismissed alert from local state instead of
+  // re-fetching the whole list. Keeps the dismiss interaction to a single API
+  // call (the dismiss itself).
+  const removeAlertLocally = (id) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+    setTotal((t) => Math.max(0, t - 1));
+  };
+
   useEffect(() => {
     load(1, level);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,8 +223,12 @@ export function AlertsTab({
               const refresh = () => load(page, level);
               // Full-row override escape hatch: the app owns the cells.
               if (renderRow) {
+                // Optimistic dismiss (drop the row locally); refresh stays
+                // available for apps that want a full reload.
                 const dismiss = () =>
-                  dismissAlert(context, alert.id, fetchOptions).then(refresh);
+                  dismissAlert(context, alert.id, fetchOptions).then(() =>
+                    removeAlertLocally(alert.id)
+                  );
                 return (
                   <React.Fragment key={alert.id}>
                     {renderRow(alert, {
@@ -232,6 +247,7 @@ export function AlertsTab({
                   alert={alert}
                   fetchOptions={fetchOptions}
                   refresh={refresh}
+                  onDismissed={removeAlertLocally}
                   renderRowActions={renderRowActions}
                 />
               );
