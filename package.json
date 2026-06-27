@@ -1,6 +1,6 @@
 {
   "name": "@growth-operations/ui-shared",
-  "version": "1.6.9",
+  "version": "1.6.10",
   "description": "Shared HubSpot UI-extension modules (Home, Billing) for Growth Operations apps.",
   "license": "MIT",
   "private": false,

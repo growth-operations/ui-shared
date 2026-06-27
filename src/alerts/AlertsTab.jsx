@@ -166,10 +166,25 @@ export function AlertsTab({
 
   // Optimistically remove a dismissed alert from local state instead of
   // re-fetching the whole list. Keeps the dismiss interaction to a single API
-  // call (the dismiss itself).
+  // call (the dismiss itself) in the common case. But if removing the row empties
+  // the current page while other pages still have alerts, fall back to a fetch so
+  // the user isn't stranded on a falsely-empty "No alerts" view: backfill this
+  // page, or step back a page if we just cleared the last one.
   const removeAlertLocally = (id) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
-    setTotal((t) => Math.max(0, t - 1));
+    const remainingHere = alerts.filter((a) => a.id !== id);
+    const newTotal = Math.max(0, total - 1);
+
+    if (remainingHere.length === 0 && newTotal > 0) {
+      // Page emptied but more remain — reload. If this was the last page and it's
+      // now gone, step back one; otherwise reload the same page to pull the next
+      // page's rows up into it.
+      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      load(Math.min(page, lastPage), level);
+      return;
+    }
+
+    setAlerts(remainingHere);
+    setTotal(newTotal);
   };
 
   useEffect(() => {
