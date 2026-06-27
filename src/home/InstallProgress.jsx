@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   Flex,
   Tile,
@@ -30,13 +30,22 @@ import {
 //              activation Pub/Sub message via an app endpoint). If omitted, the
 //              FAILED state still renders guidance, just no button.
 export function InstallProgress({ state, onRetry }) {
+  // Clamp the displayed step to be MONOTONIC. A reinstall (re-consent for new
+  // scopes) re-runs activation, which resets activation_step to 0 server-side;
+  // the poll can catch that reset and the bar would visibly jump backwards
+  // (e.g. 37% -> 0% -> 53%). Track the high-water mark per mount so progress
+  // only ever moves forward.
+  const maxStepSeen = useRef(0);
+
   const activation = state?.activation;
   // No activation block => nothing to show (Home's health hero takes over).
   if (!activation) return null;
 
   const status = activation.status;
-  const step = activation.step ?? 0;
+  const rawStep = activation.step ?? 0;
   const total = activation.total ?? 5;
+  maxStepSeen.current = Math.max(maxStepSeen.current, rawStep);
+  const step = maxStepSeen.current;
   const warnings = activation.warnings ?? [];
   const complete = activation.complete === true || status === "completed";
 
