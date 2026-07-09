@@ -31,15 +31,21 @@ import { fmtMoney } from "../lib/format";
 //   appKey  — the billing app_key for THIS app (always a prop, never hardcoded).
 
 // One plan card. Shows tier name, price for the selected interval, credits,
-// feature bullets, and a CTA: "Current" (disabled) for the active tier,
-// "Contact sales" for talk_to_sales tiers, else "Choose" which pre-creates a
-// checkout session for that tier's price in the selected interval.
+// feature bullets, and a CTA: "Current plan" (disabled) for the active tier AT
+// its actual interval, "Contact sales" for talk_to_sales tiers, else "Choose"
+// (or "Switch to Annual/Monthly" on the current card) which pre-creates a
+// checkout/upgrade session for that tier's price in the selected interval.
 //
 // The Monthly/Annual toggle is PER CARD (not a single grid-wide switch): a tier
 // may offer one interval and not the other (e.g. a top tier that's monthly-only),
 // so each card owns its own interval state and only shows the toggle when it has
 // BOTH legs. A subscription still bills on one cadence — the cadence bought is
-// whatever this card's toggle shows when its "Choose" is clicked.
+// whatever this card's toggle shows when its CTA is clicked. The CURRENT card
+// also shows the toggle (defaulting to the account's real interval via
+// plan.current_interval) so a monthly customer can switch to annual in place —
+// toggling it to a DIFFERENT interval than what's billed swaps the disabled
+// "Current plan" marker for an actionable switch CTA (always upgrade/start,
+// never a new checkout, since a real subscription already exists).
 function PlanCard({
   plan,
   billingBaseUrl,
@@ -69,9 +75,25 @@ function PlanCard({
   openIframe = null,
 }) {
   // Default this card to annual when it offers annual (cheaper-per-month story);
-  // monthly-only tiers default to monthly. Both legs → show the toggle.
+  // monthly-only tiers default to monthly. Both legs → show the toggle. The
+  // CURRENT card is the one exception: default to the account's ACTUAL billing
+  // interval (plan.current_interval, stamped server-side from the mirrored
+  // Subscription) so the toggle opens showing reality, not a marketing default
+  // — falling back to the annual-preferred default only if the interval is
+  // unknown (e.g. an older payload before this field existed).
   const hasMonthly = !!plan.monthly;
   const hasAnnual = !!plan.annual;
+  const defaultInterval = plan.current
+    ? plan.current_interval === "month"
+      ? "monthly"
+      : plan.current_interval === "year"
+        ? "annual"
+        : hasAnnual
+          ? "annual"
+          : "monthly"
+    : hasAnnual
+      ? "annual"
+      : "monthly";
   // A lower-ranked tier than the customer's current one: a downgrade. Not
   // self-serve (changes go through support) — show it for context, disabled,
   // with a Talk-to-sales CTA. Only meaningful in the trial picker (currentOrder
@@ -81,10 +103,19 @@ function PlanCard({
     !plan.current &&
     plan.tier_order != null &&
     plan.tier_order < currentOrder;
-  // The interval toggle is only useful when the card can be acted on; a current
-  // or downgrade card is read-only, so hide its toggle.
-  const canToggle = hasMonthly && hasAnnual && !plan.current && !isDowngrade;
-  const [interval, setInterval] = useState(hasAnnual ? "annual" : "monthly");
+  // The interval toggle is useful whenever the card can be acted on OR is the
+  // current plan (so a monthly customer can switch to annual in place) — only
+  // a downgrade card is fully read-only.
+  const canToggle = hasMonthly && hasAnnual && !isDowngrade;
+  const [interval, setInterval] = useState(defaultInterval);
+  // On the current card, toggling to a DIFFERENT interval than what's actually
+  // billed is the in-place monthly<->annual switch; toggling back to the same
+  // interval (or current_interval being unknown) is just "Current plan".
+  const isIntervalSwitch =
+    plan.current &&
+    plan.current_interval != null &&
+    ((interval === "annual" && plan.current_interval !== "year") ||
+      (interval === "monthly" && plan.current_interval !== "month"));
   const leg = interval === "annual" ? plan.annual : plan.monthly;
   const periodLabel = interval === "annual" ? "/yr" : "/mo";
 
@@ -105,12 +136,18 @@ function PlanCard({
       ? Math.round((1 - plan.annual.unit_amount / annualFull) * 100)
       : 0;
 
-  // Direct one-click checkout link to the billing service's redirect endpoint.
-  // Null until we have everything (billing host, appKey, portal, this interval's
-  // price) — the button is disabled until then.
+  // Direct one-click link to the billing service's redirect endpoint. Null
+  // until we have everything (billing host, appKey, portal, this interval's
+  // price) — the button is disabled until then. The current card's in-place
+  // interval switch is ALWAYS upgrade/start (swap the existing sub's item),
+  // regardless of what `endpoint` this grid instance was given — it can never
+  // be a first-time checkout/start, since plan.current + a real
+  // current_interval only happens with an existing subscription already in
+  // place. Getting this wrong would double-bill (a second Checkout session).
+  const startEndpoint = isIntervalSwitch ? "upgrade/start" : endpoint;
   const startUrl =
     billingBaseUrl && appKey && portalId && leg?.price_id
-      ? `${billingBaseUrl}/v1/billing/${endpoint}` +
+      ? `${billingBaseUrl}/v1/billing/${startEndpoint}` +
         `?app_key=${encodeURIComponent(appKey)}` +
         `&portal_id=${encodeURIComponent(portalId)}` +
         `&price_id=${encodeURIComponent(leg.price_id)}` +
@@ -176,12 +213,22 @@ function PlanCard({
           <Text key={`pad-${i}`}>{" "}</Text>
         ))}
 
-        {/* CTA. Current tier => disabled marker. Downgrade (lower than current,
-            trial picker) => disabled + Talk-to-sales (not self-serve).
-            talk_to_sales tier => contact link. Otherwise pre-create-then-link
-            checkout/upgrade for the selected interval. */}
-        {plan.current ? (
+        {/* CTA. Current tier, same interval => disabled marker. Current tier,
+            toggled to the OTHER interval => actionable in-place switch (same
+            upgrade/start swap as a tier upgrade, just same-tier). Downgrade
+            (lower than current, trial picker) => disabled + Talk-to-sales (not
+            self-serve). talk_to_sales tier => contact link. Otherwise
+            pre-create-then-link checkout/upgrade for the selected interval. */}
+        {plan.current && !isIntervalSwitch ? (
           <Button disabled>Current plan</Button>
+        ) : plan.current && isIntervalSwitch ? (
+          <Button
+            href={startUrl ? { url: startUrl, external: true } : undefined}
+            disabled={!startUrl}
+            variant="primary"
+          >
+            Switch to {interval === "annual" ? "Annual" : "Monthly"}
+          </Button>
         ) : isDowngrade ? (
           <Button
             href={supportUrl ? { url: supportUrl, external: true } : undefined}
