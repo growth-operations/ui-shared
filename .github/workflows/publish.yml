@@ -36,9 +36,14 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       # Trusted Publishers requires npm CLI >= 11.5.1 (newer than the npm
-      # bundled with node 22). Upgrade before publishing.
+      # bundled with node 22). Pinned (not @latest) — npm 12.0.0 shipped
+      # 2026-07-09 with libnpmpublish requiring 'sigstore' but not correctly
+      # bundling/declaring it, breaking `npm publish` outright
+      # (MODULE_NOT_FOUND: sigstore) within hours of release. 11.18.0 is the
+      # last stable release before it and still satisfies >= 11.5.1. Bump
+      # this pin once npm ships a fix, rather than drifting back to @latest.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       # No build step — the package ships source (HubSpot's bundler transpiles
       # JSX at the consuming app's `hs project upload`). publishConfig.access
