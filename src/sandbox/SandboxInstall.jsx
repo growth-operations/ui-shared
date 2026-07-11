@@ -2,28 +2,38 @@
 //
 // The one sanctioned path to a sandbox install (a customer can't self-install on
 // a sandbox from the marketplace — the backend rejects that). From a prod
-// portal, this mints a signed sandbox install link (carrying sandbox=true + the
-// prod customer to link) THE MOMENT THE COMPONENT MOUNTS, so the link is a
-// single, ordinary click — open it on the sandbox account you want to install
-// on, no separate "generate" step first. HubSpot's Link/Button href must be a
-// static value at render time (can't be set from an async result in the same
-// click), so minting on mount rather than on click is what makes one-click
-// possible at all.
+// portal, this first GETs the account's existing linked sandboxes + limit, then
+// — only when still under the limit — mints a signed sandbox install link
+// (carrying sandbox=true + the prod customer to link) THE MOMENT THE COMPONENT
+// MOUNTS, so the link is a single, ordinary click — open it on the sandbox
+// account you want to install on, no separate "generate" step first. HubSpot's
+// Link/Button href must be a static value at render time (can't be set from an
+// async result in the same click), so minting on mount rather than on click is
+// what makes one-click possible at all.
+//
+// Always shows what's already linked (previously this rendered the mint action
+// unconditionally with no signal a sandbox already existed, and a customer
+// could keep minting more with zero visibility). At the limit, shows the
+// linked list + a "X of Y used" indicator with no mint action underneath —
+// not a disabled/dead button, just nothing to click.
 //
 // Extensible per app: the caller passes the mint `path` on its OWN backend
 // (base-hosted apps -> /v1/hubspot/app_pages/... no; the install mint lives at
 // /v2/hubspot/install/{app}/sandbox-link on base; self-hosted apps serve their
-// own), plus the portalId. callAppApi targets context.variables.BASE_URL, so
-// each app's BASE_URL routes to the right service. Apps not allowlisted get a
-// 403 from the endpoint, surfaced as a calm message.
+// own), plus the portalId. The SAME path is used for both the GET (status) and
+// POST (mint) — the backend distinguishes by HTTP method. callAppApi targets
+// context.variables.BASE_URL, so each app's BASE_URL routes to the right
+// service. Apps not allowlisted get a 403 from the endpoint, surfaced as a
+// calm message.
 import React, { useEffect, useState } from "react";
-import { Flex, Heading, Text, Link, Alert } from "@hubspot/ui-extensions";
+import { Flex, Heading, Text, Link, Alert, StatusTag } from "@hubspot/ui-extensions";
 
 import { callAppApi, AppApiError } from "../sdk/app/base";
 
-// context: extension context. path: the mint endpoint on the app's backend
-// (e.g. `/v2/hubspot/install/${appKey}/sandbox-link`). portalId: the prod portal
-// minting the link. appName: copy. heading/description: optional overrides.
+// context: extension context. path: the status+mint endpoint on the app's
+// backend (e.g. `/v2/hubspot/install/${appKey}/sandbox-link`). portalId: the
+// prod portal minting the link. appName: copy. heading/description: optional
+// overrides.
 export function SandboxInstall({
   context,
   path,
@@ -32,6 +42,8 @@ export function SandboxInstall({
   heading = "Install on a sandbox",
   description,
 }) {
+  const [linkedSandboxes, setLinkedSandboxes] = useState([]);
+  const [limit, setLimit] = useState(1);
   const [installUrl, setInstallUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,8 +54,20 @@ export function SandboxInstall({
       try {
         const pid = portalId ?? context.portal.id;
         const sep = path.includes("?") ? "&" : "?";
-        const res = await callAppApi(context, `${path}${sep}portalId=${pid}`, "POST");
-        if (!cancelled) setInstallUrl(res?.install_url ?? null);
+        const qs = `${path}${sep}portalId=${pid}`;
+        const status = await callAppApi(context, qs, "GET");
+        if (cancelled) return;
+        const linked = status?.linked_sandboxes ?? [];
+        const cap = status?.limit ?? 1;
+        setLinkedSandboxes(linked);
+        setLimit(cap);
+        // Only mint (and offer) a NEW link while still under the limit — at
+        // the limit, the linked list above is the whole story; there's
+        // nothing else to click.
+        if (linked.length < cap) {
+          const res = await callAppApi(context, qs, "POST");
+          if (!cancelled) setInstallUrl(res?.install_url ?? null);
+        }
       } catch (err) {
         // The backend 403s apps that don't allow sandbox installs — show its
         // message rather than a generic failure.
@@ -60,9 +84,21 @@ export function SandboxInstall({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, portalId]);
 
+  const atLimit = linkedSandboxes.length >= limit;
+
   return (
     <Flex direction="column" gap="small">
-      <Heading>{heading}</Heading>
+      <Flex direction="row" gap="small" align="center">
+        <Heading>{heading}</Heading>
+        {!loading && !error && (
+          // At the limit is the NORMAL end state for the common case (limit
+          // defaults to 1) — reaching it isn't a problem, so this reads
+          // success/neutral either way, never a warning color.
+          <StatusTag variant="success">
+            {linkedSandboxes.length} of {limit} used
+          </StatusTag>
+        )}
+      </Flex>
       <Text>
         {description ??
           `Spin up ${appName} on a HubSpot sandbox account, linked to your billing. ` +
@@ -73,6 +109,17 @@ export function SandboxInstall({
         <Alert title="Couldn't create a sandbox link" variant="warning">
           <Text>{error}</Text>
         </Alert>
+      )}
+
+      {linkedSandboxes.length > 0 && (
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>Already linked</Text>
+          {linkedSandboxes.map((s) => (
+            <Text key={s.portal_id}>
+              {s.name || s.portal_id} — {s.status}
+            </Text>
+          ))}
+        </Flex>
       )}
 
       {installUrl && (
@@ -87,7 +134,13 @@ export function SandboxInstall({
         </Flex>
       )}
 
-      {loading && !error && <Text variant="microcopy">Preparing your sandbox install link…</Text>}
+      {!loading && !error && atLimit && linkedSandboxes.length > 0 && (
+        <Text variant="microcopy">
+          Need another sandbox linked? Contact us.
+        </Text>
+      )}
+
+      {loading && !error && <Text variant="microcopy">Checking your sandbox installs…</Text>}
     </Flex>
   );
 }
