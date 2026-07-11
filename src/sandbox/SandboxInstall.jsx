@@ -15,20 +15,34 @@
 // unconditionally with no signal a sandbox already existed, and a customer
 // could keep minting more with zero visibility). At the limit, shows the
 // linked list + a "X of Y used" indicator with no mint action underneath —
-// not a disabled/dead button, just nothing to click.
+// not a disabled/dead button, just nothing to click. Each linked sandbox is a
+// card showing who connected it and when, a link to its own app-pages console,
+// and an uninstall action (armed/confirm — same two-step pattern as the
+// migration console's rollback).
 //
 // Extensible per app: the caller passes the mint `path` on its OWN backend
 // (base-hosted apps -> /v1/hubspot/app_pages/... no; the install mint lives at
 // /v2/hubspot/install/{app}/sandbox-link on base; self-hosted apps serve their
 // own), plus the portalId. The SAME path is used for both the GET (status) and
-// POST (mint) — the backend distinguishes by HTTP method. callAppApi targets
+// POST (mint) — the backend distinguishes by HTTP method. The uninstall action
+// posts to `${path}/{sandboxPortalId}/uninstall`. callAppApi targets
 // context.variables.BASE_URL, so each app's BASE_URL routes to the right
 // service. Apps not allowlisted get a 403 from the endpoint, surfaced as a
 // calm message.
 import React, { useEffect, useState } from "react";
-import { Flex, Heading, Text, Link, Alert, StatusTag } from "@hubspot/ui-extensions";
+import {
+  Flex,
+  Tile,
+  Heading,
+  Text,
+  Link,
+  Alert,
+  Button,
+  StatusTag,
+} from "@hubspot/ui-extensions";
 
 import { callAppApi, AppApiError } from "../sdk/app/base";
+import { fmtDateTime } from "../lib/format";
 
 // context: extension context. path: the status+mint endpoint on the app's
 // backend (e.g. `/v2/hubspot/install/${appKey}/sandbox-link`). portalId: the
@@ -47,14 +61,18 @@ export function SandboxInstall({
   const [installUrl, setInstallUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [armedUninstall, setArmedUninstall] = useState(null); // portal_id or null
+  const [uninstalling, setUninstalling] = useState(null); // portal_id or null
+  const [uninstallError, setUninstallError] = useState(null);
+
+  const pid = portalId ?? context.portal.id;
+  const sep = path.includes("?") ? "&" : "?";
+  const qs = `${path}${sep}portalId=${pid}`;
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const pid = portalId ?? context.portal.id;
-        const sep = path.includes("?") ? "&" : "?";
-        const qs = `${path}${sep}portalId=${pid}`;
         const status = await callAppApi(context, qs, "GET");
         if (cancelled) return;
         const linked = status?.linked_sandboxes ?? [];
@@ -84,6 +102,22 @@ export function SandboxInstall({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, portalId]);
 
+  async function doUninstall(sandboxPortalId) {
+    setUninstalling(sandboxPortalId);
+    setUninstallError(null);
+    try {
+      await callAppApi(context, `${qs}/${sandboxPortalId}/uninstall`, "POST");
+      setLinkedSandboxes((prev) =>
+        prev.filter((s) => s.portal_id !== sandboxPortalId)
+      );
+      setArmedUninstall(null);
+    } catch (err) {
+      setUninstallError(err instanceof AppApiError ? err.message : String(err));
+    } finally {
+      setUninstalling(null);
+    }
+  }
+
   const atLimit = linkedSandboxes.length >= limit;
 
   return (
@@ -111,13 +145,66 @@ export function SandboxInstall({
         </Alert>
       )}
 
+      {uninstallError && (
+        <Alert title="Couldn't uninstall that sandbox" variant="warning">
+          <Text>{uninstallError}</Text>
+        </Alert>
+      )}
+
       {linkedSandboxes.length > 0 && (
-        <Flex direction="column" gap="extra-small">
+        <Flex direction="column" gap="small">
           <Text format={{ fontWeight: "bold" }}>Already linked</Text>
           {linkedSandboxes.map((s) => (
-            <Text key={s.portal_id}>
-              {s.name || s.portal_id} — {s.status}
-            </Text>
+            <Tile key={s.portal_id}>
+              <Flex direction="column" gap="extra-small">
+                <Flex direction="row" gap="small" align="center">
+                  <Text format={{ fontWeight: "demibold" }}>
+                    {s.name || s.portal_id}
+                  </Text>
+                  <StatusTag variant="default">{s.status}</StatusTag>
+                </Flex>
+                <Text variant="microcopy">
+                  Connected {s.connected_at ? fmtDateTime(s.connected_at) : "—"}
+                  {s.connected_by ? ` by ${s.connected_by}` : ""}
+                </Text>
+                <Flex direction="row" gap="small" align="center">
+                  {s.console_url && (
+                    <Link href={{ url: s.console_url, external: true }}>
+                      Open in HubSpot →
+                    </Link>
+                  )}
+                  {armedUninstall === s.portal_id ? (
+                    <Flex direction="row" gap="small" align="center">
+                      <Text variant="microcopy">Uninstall this sandbox?</Text>
+                      <Button
+                        size="xs"
+                        variant="destructive"
+                        onClick={() => doUninstall(s.portal_id)}
+                        disabled={uninstalling === s.portal_id}
+                      >
+                        Confirm uninstall
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => setArmedUninstall(null)}
+                        disabled={uninstalling === s.portal_id}
+                      >
+                        Cancel
+                      </Button>
+                    </Flex>
+                  ) : (
+                    <Button
+                      size="xs"
+                      variant="destructive"
+                      onClick={() => setArmedUninstall(s.portal_id)}
+                    >
+                      Uninstall…
+                    </Button>
+                  )}
+                </Flex>
+              </Flex>
+            </Tile>
           ))}
         </Flex>
       )}
