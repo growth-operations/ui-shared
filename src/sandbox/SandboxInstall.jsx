@@ -55,7 +55,7 @@ export function SandboxInstall({
       <Text>
         {description ??
           `Spin up ${appName} on a HubSpot sandbox account, linked to your billing. ` +
-            `Generate a link, then open it while signed in to your sandbox.`}
+            `Generate a link, then open it on the sandbox account you want to install on.`}
       </Text>
 
       {error && (
@@ -70,7 +70,9 @@ export function SandboxInstall({
             Open the sandbox install →
           </Link>
           <Text variant="microcopy">
-            Open this while signed in to the sandbox account you want to install on.
+            Clicking this link opens HubSpot's install screen for the
+            sandbox account you choose — you don't need to switch accounts
+            first.
           </Text>
         </Flex>
       ) : (
