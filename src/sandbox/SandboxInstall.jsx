@@ -2,9 +2,13 @@
 //
 // The one sanctioned path to a sandbox install (a customer can't self-install on
 // a sandbox from the marketplace — the backend rejects that). From a prod
-// portal, this asks the app's mint endpoint for a signed sandbox install link
-// (which carries sandbox=true + the prod customer to link), then surfaces it for
-// the user to open on their sandbox account.
+// portal, this mints a signed sandbox install link (carrying sandbox=true + the
+// prod customer to link) THE MOMENT THE COMPONENT MOUNTS, so the link is a
+// single, ordinary click — open it on the sandbox account you want to install
+// on, no separate "generate" step first. HubSpot's Link/Button href must be a
+// static value at render time (can't be set from an async result in the same
+// click), so minting on mount rather than on click is what makes one-click
+// possible at all.
 //
 // Extensible per app: the caller passes the mint `path` on its OWN backend
 // (base-hosted apps -> /v1/hubspot/app_pages/... no; the install mint lives at
@@ -12,8 +16,8 @@
 // own), plus the portalId. callAppApi targets context.variables.BASE_URL, so
 // each app's BASE_URL routes to the right service. Apps not allowlisted get a
 // 403 from the endpoint, surfaced as a calm message.
-import React, { useState } from "react";
-import { Flex, Heading, Text, Button, Link, Alert } from "@hubspot/ui-extensions";
+import React, { useEffect, useState } from "react";
+import { Flex, Heading, Text, Link, Alert } from "@hubspot/ui-extensions";
 
 import { callAppApi, AppApiError } from "../sdk/app/base";
 
@@ -29,25 +33,32 @@ export function SandboxInstall({
   description,
 }) {
   const [installUrl, setInstallUrl] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const mint = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const pid = portalId ?? context.portal.id;
-      const sep = path.includes("?") ? "&" : "?";
-      const res = await callAppApi(context, `${path}${sep}portalId=${pid}`, "POST");
-      setInstallUrl(res?.install_url ?? null);
-    } catch (err) {
-      // The backend 403s apps that don't allow sandbox installs — show its
-      // message rather than a generic failure.
-      setError(err instanceof AppApiError ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const pid = portalId ?? context.portal.id;
+        const sep = path.includes("?") ? "&" : "?";
+        const res = await callAppApi(context, `${path}${sep}portalId=${pid}`, "POST");
+        if (!cancelled) setInstallUrl(res?.install_url ?? null);
+      } catch (err) {
+        // The backend 403s apps that don't allow sandbox installs — show its
+        // message rather than a generic failure.
+        if (!cancelled) {
+          setError(err instanceof AppApiError ? err.message : String(err));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, portalId]);
 
   return (
     <Flex direction="column" gap="small">
@@ -55,7 +66,7 @@ export function SandboxInstall({
       <Text>
         {description ??
           `Spin up ${appName} on a HubSpot sandbox account, linked to your billing. ` +
-            `Generate a link, then open it on the sandbox account you want to install on.`}
+            `Open the link below on the sandbox account you want to install on.`}
       </Text>
 
       {error && (
@@ -64,26 +75,19 @@ export function SandboxInstall({
         </Alert>
       )}
 
-      {installUrl ? (
+      {installUrl && (
         <Flex direction="column" gap="extra-small">
           <Link href={{ url: installUrl, external: true }}>
-            Open the sandbox install →
+            Install on a sandbox →
           </Link>
           <Text variant="microcopy">
-            Clicking this link opens HubSpot's install screen for the
-            sandbox account you choose — you don't need to switch accounts
-            first.
+            Opens HubSpot's install screen for the sandbox account you
+            choose — you don't need to switch accounts first.
           </Text>
         </Flex>
-      ) : (
-        <Button
-          variant="secondary"
-          disabled={loading}
-          onClick={mint}
-        >
-          {loading ? "Generating…" : "Generate sandbox install link"}
-        </Button>
       )}
+
+      {loading && !error && <Text variant="microcopy">Preparing your sandbox install link…</Text>}
     </Flex>
   );
 }
