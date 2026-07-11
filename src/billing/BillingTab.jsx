@@ -117,14 +117,36 @@ function StatusPanel({ entitlement }) {
   }
 
   if (status === "pending_purchase") {
+    // No active subscription — has_payment_method describes a CARD on file
+    // (from a prior/lapsed sub), not whether one's usable here: there's
+    // nothing for it to auto-charge. So unlike `trialing` (where a card on
+    // file means "nothing to do"), every pending_purchase account needs the
+    // SAME next step — pick a plan below — the copy just says so plainly
+    // rather than repeating the stale "add a payment method" ask when a
+    // card may already exist.
     const resumeCta =
       mode === "credits"
-        ? "Choose a plan in Stripe to resume."
-        : "Add a payment method in Stripe to resume syncing your data.";
+        ? "Choose a plan below to resume."
+        : "Choose a plan below to resume syncing your data.";
     return (
       <Alert variant="warning">
         <Flex direction="column" gap="extra-small">
           <Text format={{ fontWeight: "bold" }}>Your free trial has ended</Text>
+          <Text>{resumeCta}</Text>
+        </Flex>
+      </Alert>
+    );
+  }
+
+  if (status === "canceled") {
+    const resumeCta =
+      mode === "credits"
+        ? "Choose a plan below to start a new subscription."
+        : "Choose a plan below to start a new subscription and resume syncing your data.";
+    return (
+      <Alert variant="warning">
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>Your subscription was canceled</Text>
           <Text>{resumeCta}</Text>
         </Flex>
       </Alert>
@@ -166,45 +188,63 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
   // OPENED TAB. No in-iframe portal-session fetch (that round trip hit the billing
   // service's cold-start/CPU stall → the iframe's 15s "Gateway took too long").
   // Same pattern as the credits arm + PlanGrid's /checkout/start. null (button
-  // disabled) until billing_base_url is known.
+  // disabled) until billing_base_url + the signed action token are both known.
+  // The endpoint no longer accepts a bare app_key/portal_id (that was an
+  // unauthenticated portal-hijack vector) — it requires the `token` the app's
+  // own /v1/home minted with its client_secret (state.billing_action_tokens).
   const base = state?.billing_base_url ?? null;
   const portalId = context?.portal?.id;
+  const portalToken = state?.billing_action_tokens?.portal ?? null;
   const returnUrl = state?.app_id
     ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
     : "https://app.hubspot.com/";
   const portalStartUrl =
-    base && appKey && portalId
+    base && portalToken
       ? `${base}/v1/billing/portal/start` +
-        `?app_key=${encodeURIComponent(appKey)}` +
-        `&portal_id=${encodeURIComponent(String(portalId))}` +
+        `?token=${encodeURIComponent(portalToken)}` +
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 
-  // Tier picker — shown ONLY while trialing (the lifecycle: trial starts on the
-  // entry tier at install; while trialing the customer may upgrade to a higher
-  // tier in-app; once active, plan changes go through support). We show the FULL
-  // ladder for context so the customer sees where they sit:
-  //   current tier  -> "Current plan" (disabled marker; PlanCard keys off
-  //                    plan.current, stamped server-side on the account's tier).
-  //   higher tiers  -> the actionable upgrade (CTA targets /v1/billing/upgrade/
-  //                    start, swapping the trialing sub's item — no new sub).
-  //   lower tiers   -> shown disabled with a Talk-to-sales CTA (downgrades aren't
-  //                    self-serve). PlanCard derives this from currentOrder.
+  // Tier picker — every status needs ONE of two distinct modes, never both:
+  //   trialing                    -> UPGRADE mode: a trialing sub already
+  //     exists, so a higher-tier click swaps its item in place
+  //     (/v1/billing/upgrade/start) rather than starting a second
+  //     subscription. Lower tiers show disabled (Talk-to-sales; downgrades
+  //     aren't self-serve). currentOrder is REQUIRED here so PlanCard can
+  //     tell upgrade from downgrade.
+  //   pending_purchase / canceled -> CHECKOUT mode: there is NO active
+  //     subscription to swap — every tier is a genuinely fresh purchase
+  //     (/v1/billing/checkout/start, PlanGrid's default). currentOrder is
+  //     intentionally omitted (undefined) so no tier reads as a downgrade;
+  //     with nothing active, every tier is just a plan to start.
+  // Never both at once: a customer either has a subscription to adjust
+  // (upgrade) or doesn't (checkout) — showing the upgrade endpoint with no
+  // real subscription behind it would 404/error at click time.
   const isTrialing = ent.status === "trialing";
+  const needsCheckout =
+    ent.status === "pending_purchase" || ent.status === "canceled";
   const plans = state?.plans ?? [];
-  const currentOrder = plans.find((p) => p.current)?.tier_order;
-  // Render the picker only while trialing AND once we know the current tier
-  // (currentOrder drives upgrade-vs-downgrade per card).
-  const showPicker = isTrialing && currentOrder != null && plans.length > 0;
+  const currentOrder = isTrialing
+    ? plans.find((p) => p.current)?.tier_order
+    : undefined;
+  // Trialing: only once we know the current tier (currentOrder drives
+  // upgrade-vs-downgrade per card). Checkout: as soon as there's a catalog
+  // to pick from — there's no "current tier" gate to wait on.
+  const showPicker =
+    (isTrialing && currentOrder != null && plans.length > 0) ||
+    (needsCheckout && plans.length > 0);
 
   return (
     <Flex direction="column" gap="medium">
-      {/* PRIMARY CTA at the top. Direct external link to the billing-service
-          redirect (opens a new tab); no in-iframe pre-create fetch. */}
+      {/* PRIMARY CTA when there's an existing subscription to manage
+          (trialing/active/past_due). For pending_purchase/canceled there is
+          nothing for the Stripe Customer Portal to manage — the plan picker
+          below is the actual recovery path, so this becomes a secondary
+          link rather than the primary action. */}
       <LoadingButton
         href={portalStartUrl ? { url: portalStartUrl, external: true } : undefined}
         disabled={!portalStartUrl}
-        variant="primary"
+        variant={needsCheckout ? "secondary" : "primary"}
       >
         {portalStartUrl ? "Manage billing in Stripe" : "Preparing billing…"}
       </LoadingButton>
@@ -212,15 +252,18 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
       <StatusPanel entitlement={state?.entitlement} />
 
       <Text format={{ fontStyle: "italic" }}>
-        Billing is managed in Stripe across all Growth Operations apps. Use the
-        link above to update your plan, payment method, or view invoices.
+        {needsCheckout
+          ? "Choose a plan below to resume. Once you have an active subscription, use the link above to manage payment methods or view invoices."
+          : "Billing is managed in Stripe across all Growth Operations apps. Use the link above to update your plan, payment method, or view invoices."}
       </Text>
 
-      {/* Trial-only tier ladder: current (marked), higher (upgradeable), lower
-          (disabled, Talk-to-sales). Hidden once active. Upgrading swaps the
-          trialing sub onto the higher tier, keeping the trial end date. The full
-          `plans` list is passed; PlanCard decides each card's state from
-          plan.current + currentOrder. */}
+      {/* Trialing: current (marked), higher (upgradeable), lower (disabled,
+          Talk-to-sales) — upgrading swaps the trialing sub onto the higher
+          tier, keeping the trial end date. pending_purchase/canceled: every
+          tier plain-actionable (fresh checkout, PlanGrid's default props/
+          endpoint) — no currentOrder means PlanCard never marks a downgrade.
+          The full `plans` list is passed either way; PlanCard decides each
+          card's state from plan.current + currentOrder. */}
       {showPicker && (
         <PlanGrid
           context={context}
@@ -228,10 +271,14 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
           appKey={appKey}
           plans={plans}
           currentOrder={currentOrder}
-          endpoint="upgrade/start"
-          ctaLabel="Upgrade to"
-          heading="Your plan"
-          footnote="Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
+          endpoint={needsCheckout ? "checkout/start" : "upgrade/start"}
+          ctaLabel={needsCheckout ? "Choose" : "Upgrade to"}
+          heading={needsCheckout ? "Choose a plan to resume" : "Your plan"}
+          footnote={
+            needsCheckout
+              ? "Choose a plan to start a new subscription and resume syncing your data."
+              : "Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
+          }
           openIframe={openIframe}
         />
       )}
@@ -248,17 +295,18 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
   // (that round trip hit the billing service's cold-start/CPU stall and surfaced
   // as the iframe's 15s "Gateway took too long" error). Same pattern as
   // PlanGrid's /checkout/start "Choose" button. null (button disabled) until
-  // billing_base_url is known.
+  // billing_base_url + the signed action token are both known — the endpoint no
+  // longer accepts a bare app_key/portal_id (state.billing_action_tokens).
   const base = state?.billing_base_url ?? null;
   const portalId = context?.portal?.id;
+  const portalToken = state?.billing_action_tokens?.portal ?? null;
   const returnUrl = state?.app_id
     ? `https://app.hubspot.com/app/${portalId}/${state.app_id}/billing`
     : "https://app.hubspot.com/";
   const portalStartUrl =
-    base && appKey && portalId
+    base && portalToken
       ? `${base}/v1/billing/portal/start` +
-        `?app_key=${encodeURIComponent(appKey)}` +
-        `&portal_id=${encodeURIComponent(String(portalId))}` +
+        `?token=${encodeURIComponent(portalToken)}` +
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 

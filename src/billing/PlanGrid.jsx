@@ -49,8 +49,7 @@ import { fmtMoney } from "../lib/format";
 function PlanCard({
   plan,
   billingBaseUrl,
-  appKey,
-  portalId,
+  billingActionTokens,
   returnUrl,
   supportUrl,
   maxFeatures = 0,
@@ -137,19 +136,25 @@ function PlanCard({
       : 0;
 
   // Direct one-click link to the billing service's redirect endpoint. Null
-  // until we have everything (billing host, appKey, portal, this interval's
-  // price) — the button is disabled until then. The current card's in-place
-  // interval switch is ALWAYS upgrade/start (swap the existing sub's item),
-  // regardless of what `endpoint` this grid instance was given — it can never
-  // be a first-time checkout/start, since plan.current + a real
-  // current_interval only happens with an existing subscription already in
-  // place. Getting this wrong would double-bill (a second Checkout session).
+  // until we have everything (billing host, a signed token for the target
+  // action, this interval's price) — the button is disabled until then. The
+  // current card's in-place interval switch is ALWAYS upgrade/start (swap the
+  // existing sub's item), regardless of what `endpoint` this grid instance was
+  // given — it can never be a first-time checkout/start, since plan.current +
+  // a real current_interval only happens with an existing subscription already
+  // in place. Getting this wrong would double-bill (a second Checkout session).
+  // The endpoint no longer accepts a bare app_key/portal_id (unauthenticated
+  // portal-hijack vector) — it requires the `token` the app's own /v1/home
+  // minted with its client_secret (billingActionTokens), keyed by ACTION
+  // ("checkout" or "upgrade") since a single card's target action can differ
+  // from the grid's default via the interval-switch case above.
   const startEndpoint = isIntervalSwitch ? "upgrade/start" : endpoint;
+  const startAction = startEndpoint === "upgrade/start" ? "upgrade" : "checkout";
+  const startToken = billingActionTokens?.[startAction] ?? null;
   const startUrl =
-    billingBaseUrl && appKey && portalId && leg?.price_id
+    billingBaseUrl && startToken && leg?.price_id
       ? `${billingBaseUrl}/v1/billing/${startEndpoint}` +
-        `?app_key=${encodeURIComponent(appKey)}` +
-        `&portal_id=${encodeURIComponent(portalId)}` +
+        `?token=${encodeURIComponent(startToken)}` +
         `&price_id=${encodeURIComponent(leg.price_id)}` +
         `&return_url=${encodeURIComponent(returnUrl ?? "")}`
       : null;
@@ -322,6 +327,7 @@ export function PlanGrid({
 
   const supportUrl = state?.helpful_links?.supportUrl ?? null;
   const billingBaseUrl = state?.billing_base_url ?? null;
+  const billingActionTokens = state?.billing_action_tokens ?? null;
   const portalId = context?.portal?.id;
   // Where Stripe sends the customer back after pay/cancel — the app's Billing
   // tab. The card builds the one-click /checkout/start link from these.
@@ -348,8 +354,7 @@ export function PlanGrid({
             key={plan.tier}
             plan={plan}
             billingBaseUrl={billingBaseUrl}
-            appKey={appKey}
-            portalId={portalId}
+            billingActionTokens={billingActionTokens}
             returnUrl={returnUrl}
             supportUrl={supportUrl}
             maxFeatures={maxFeatures}
