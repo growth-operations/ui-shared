@@ -4,6 +4,7 @@
 // rules apply (object body, Authorization-only header). The PATCH body is passed
 // as a plain object (NOT JSON.stringify'd).
 import { buildHubSpotUrl, callHubSpotApi } from "./base";
+import { buildPropertyName } from "../../lib/urls";
 
 // List the writable properties for a HubSpot object type, shaped for a mapping
 // picker: [{ name, label, type }] sorted by label. Excludes hidden, archived,
@@ -47,4 +48,23 @@ export async function updateProperties(context, token, properties) {
   );
   // properties is wrapped in a plain object — callHubSpotApi sends it as-is.
   return callHubSpotApi(url, token, "PATCH", { properties });
+}
+
+// The enumeration options for a single property, shaped for a
+// Select/MultiSelect/checkbox-list picker: [{ label, value }]. Returns [] if
+// the property doesn't exist or isn't an enumeration (no `options` array).
+//
+// App-object properties defined in a *-hsmeta.json (e.g. an app-object's
+// `status`) are integrator-defined and land PREFIXED (a{app_id}_status), not
+// bare, once installed — pass appPrefix (from context.extension.appId) and
+// this checks the prefixed name first, falling back to bare for properties
+// that aren't app-namespaced. Omit appPrefix for object types with no app
+// prefix at all (e.g. standard objects like contacts).
+export async function getPropertyOptions(context, token, objectType, propertyName, appPrefix) {
+  const response = await getProperties(context, token, objectType);
+  const prefixedName = appPrefix ? buildPropertyName(appPrefix, propertyName) : null;
+  const prop = (response.results || []).find(
+    (p) => (prefixedName && p.name === prefixedName) || p.name === propertyName
+  );
+  return (prop?.options || []).map((o) => ({ label: o.label, value: o.value }));
 }

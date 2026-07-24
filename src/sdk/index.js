@@ -18,6 +18,7 @@ export { callHubSpotApi, buildHubSpotUrl, HubSpotApiError } from "./hubspot/base
 export {
   getObjectProperties,
   getProperties,
+  getPropertyOptions,
   updateProperties,
 } from "./hubspot/properties";
 export { getForms } from "./hubspot/forms";
