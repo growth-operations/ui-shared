@@ -78,6 +78,7 @@ export {
   HubSpotApiError,
   getObjectProperties,
   getProperties,
+  getPropertyOptions,
   updateProperties,
   getForms,
   getLists,
