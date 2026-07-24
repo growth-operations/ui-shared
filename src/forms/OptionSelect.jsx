@@ -27,7 +27,12 @@ const SOURCES = {
     return results.map((f) => ({ label: f.name, value: f.id }));
   },
   lists: async (context, token, opts) => {
-    const { lists = [] } = await getLists(context, token, opts?.query ?? "");
+    const { lists = [] } = await getLists(
+      context,
+      token,
+      opts?.query ?? "",
+      opts?.objectTypeId ?? null
+    );
     return lists.map((l) => ({ label: l.name, value: String(l.listId) }));
   },
   pipelines: async (context, token, opts) => {
@@ -61,7 +66,7 @@ export function OptionSelect({
   // url is null/absent the link is skipped, so callers can pass an "Edit" action
   // gated on a selected value.
   actions = [],
-  // Extra source args (pipelineId/objectType for pipelineStages, query for lists)
+  // Extra source args (pipelineId/objectType for pipelineStages, query/objectTypeId for lists)
   ...opts
 }) {
   const [options, setOptions] = useState([]);
@@ -75,6 +80,7 @@ export function OptionSelect({
     pipelineId: opts.pipelineId,
     objectType: opts.objectType,
     query: opts.query,
+    objectTypeId: opts.objectTypeId,
   });
 
   useStrictModeEffect(
