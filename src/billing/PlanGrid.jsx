@@ -118,15 +118,24 @@ function PlanCard({
   const leg = interval === "annual" ? plan.annual : plan.monthly;
   const periodLabel = interval === "annual" ? "/yr" : "/mo";
 
+  // Annual is billed as one yearly charge, but SaaS pricing convention shows
+  // it as an equivalent MONTHLY rate up front (the full annual total reads as
+  // sticker shock) — the actual "$X/yr" total moves to a smaller line below.
+  const monthlyEquivalent =
+    interval === "annual" && leg ? Math.round(leg.unit_amount / 12) : null;
+
   const priceText = plan.talk_to_sales
     ? "Custom"
     : leg
-      ? `${fmtMoney(leg.unit_amount, leg.currency)}${periodLabel}`
+      ? monthlyEquivalent != null
+        ? `${fmtMoney(monthlyEquivalent, leg.currency)}/mo`
+        : `${fmtMoney(leg.unit_amount, leg.currency)}${periodLabel}`
       : "Free";
 
   // Annual savings vs. paying monthly for a year. Only when this card is showing
-  // annual AND has both legs to compare. annualFull = the struck-through "12×
-  // monthly" reference price; pct = the highlighted discount.
+  // annual AND has both legs to compare. annualFull = the un-discounted "12×
+  // monthly" reference used only to compute savingsPct — never rendered as a
+  // dollar figure itself (see the "no full-year price shown" note above).
   const showAnnualSavings =
     interval === "annual" && hasMonthly && hasAnnual && plan.annual?.unit_amount;
   const annualFull = showAnnualSavings ? plan.monthly.unit_amount * 12 : null;
@@ -185,10 +194,16 @@ function PlanCard({
             <StatusTag variant="success">Save {savingsPct}%</StatusTag>
           )}
         </Flex>
-        {/* Struck-through "12× monthly" reference so the annual discount reads. */}
-        {savingsPct > 0 && (
-          <Text format={{ lineDecoration: "strikethrough", fontStyle: "italic" }}>
-            {fmtMoney(annualFull, plan.annual.currency)}/yr
+        {/* Annual is billed as one yearly charge — show the real total in a
+            lighter line under the monthly-equivalent headline price, instead
+            of a struck-through full-year dollar figure. Deliberately no
+            "$X/yr" reference price shown as a big number anywhere on this
+            card — only the small parenthetical and the Save % badge above.
+            variant "microcopy" is the SDK's de-emphasized text style (no
+            fontColor option exists on Text). */}
+        {monthlyEquivalent != null && (
+          <Text variant="microcopy">
+            (or {fmtMoney(leg.unit_amount, leg.currency)}/yr)
           </Text>
         )}
 
