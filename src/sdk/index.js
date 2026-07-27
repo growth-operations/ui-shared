@@ -32,3 +32,6 @@ export {
 // Token lifecycle.
 export { getShortLivedToken, isTokenExpired } from "./token/getShortLivedToken";
 export { TokenProvider, useToken, TokenContext } from "./token/TokenContext";
+
+// Billing service (growth-ops-apps-app), NOT the calling app's own backend.
+export { refreshBillingActionTokens } from "./billing";
