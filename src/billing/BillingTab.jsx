@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Flex,
   Heading,
@@ -11,6 +11,46 @@ import {
 import { fmtDate, daysUntil } from "../lib/format";
 import { CreditMeter } from "../home/CreditMeter";
 import { PlanGrid } from "./PlanGrid";
+import { refreshBillingActionTokens } from "../sdk/billing";
+
+// Billing action tokens (see common.billing.action_token) are signed with a
+// 5-minute TTL — short enough that a customer who opens the tab and comes
+// back later hits an expired Stripe link. Refresh at a fixed interval well
+// under that TTL so a normally-paced re-render always has a token with
+// several minutes of life left; if a refresh call is slow or fails, the
+// still-live token already in state keeps working until the next tick.
+const TOKEN_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+
+// Re-mints state.billing_action_tokens on an interval so long-open tabs never
+// hand the customer an expired Stripe link. Returns the latest known token
+// set — the initial props value until the first successful refresh, then
+// whatever the service last minted. Silently keeps the previous tokens on a
+// failed refresh (e.g. transient network blip); the tokens simply expire on
+// their own schedule as before this loop existed, which is a strict
+// improvement (some refreshes succeeding beats none).
+function useRefreshedBillingActionTokens(billingBaseUrl, initialTokens) {
+  const [tokens, setTokens] = useState(initialTokens ?? null);
+
+  useEffect(() => {
+    setTokens(initialTokens ?? null);
+  }, [initialTokens]);
+
+  useEffect(() => {
+    const portalToken = initialTokens?.portal;
+    if (!billingBaseUrl || !portalToken) return undefined;
+
+    const id = setInterval(() => {
+      refreshBillingActionTokens(billingBaseUrl, portalToken)
+        .then((fresh) => setTokens(fresh))
+        .catch(() => {});
+    }, TOKEN_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingBaseUrl, initialTokens?.portal]);
+
+  return tokens;
+}
 
 // The shared Billing tab for all Growth Operations apps. Branches on the
 // entitlement union (CONTRACT.md):
@@ -412,6 +452,20 @@ export function BillingTab({ context, state, appKey, openIframe = null }) {
   const mode = state?.entitlement?.mode;
   const isSuperAdmin = state?.user?.is_super_admin === true;
 
+  // Keep the billing action tokens (portal/checkout/upgrade Stripe links)
+  // fresh for as long as this tab stays open. Overriding billing_action_tokens
+  // on a copy of `state` means every descendant (TrialSubscriptionBilling,
+  // CreditsBilling, PlanGrid) picks up refreshed tokens through the same
+  // `state?.billing_action_tokens` reads they already had — no prop threading.
+  const refreshedTokens = useRefreshedBillingActionTokens(
+    state?.billing_base_url,
+    state?.billing_action_tokens
+  );
+  const billingState =
+    refreshedTokens && refreshedTokens !== state?.billing_action_tokens
+      ? { ...state, billing_action_tokens: refreshedTokens }
+      : state;
+
   return (
     <Flex direction="column" gap="medium">
       <Heading>Billing</Heading>
@@ -420,13 +474,13 @@ export function BillingTab({ context, state, appKey, openIframe = null }) {
           <Text>Billing settings are only available to super admins.</Text>
         </Alert>
       ) : mode === "legacy" ? (
-        <LegacyBilling state={state} />
+        <LegacyBilling state={billingState} />
       ) : mode === "credits" ? (
-        <CreditsBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
+        <CreditsBilling context={context} state={billingState} appKey={appKey} openIframe={openIframe} />
       ) : mode === "comped" ? (
         <CompedBilling />
       ) : (
-        <TrialSubscriptionBilling context={context} state={state} appKey={appKey} openIframe={openIframe} />
+        <TrialSubscriptionBilling context={context} state={billingState} appKey={appKey} openIframe={openIframe} />
       )}
     </Flex>
   );

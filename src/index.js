@@ -91,4 +91,6 @@ export {
   TokenProvider,
   useToken,
   TokenContext,
+  // Billing service
+  refreshBillingActionTokens,
 } from "./sdk/index";
