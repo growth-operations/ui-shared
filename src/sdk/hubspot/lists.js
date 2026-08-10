@@ -1,7 +1,9 @@
 // HubSpot list fetcher (for list-selection pickers).
 //
-// Paginates crm/v3/lists/search until all DYNAMIC lists are collected. The POST
-// body is a plain OBJECT — callHubSpotApi sends it as-is (NEVER JSON.stringify).
+// Paginates crm/v3/lists/search until all lists are collected — MANUAL
+// (static), DYNAMIC (active), and SNAPSHOT, so a picker isn't silently
+// missing hand-curated test/segment lists. The POST body is a plain OBJECT —
+// callHubSpotApi sends it as-is (NEVER JSON.stringify).
 import { buildHubSpotUrl, callHubSpotApi } from "./base";
 
 // context is accepted for signature consistency. query: optional name filter.
@@ -20,7 +22,7 @@ export async function getLists(context, token, query = "", objectTypeId = null) 
       query: query,
       count: count,
       offset: offset,
-      processingTypes: ["DYNAMIC"],
+      processingTypes: ["MANUAL", "DYNAMIC", "SNAPSHOT"],
       ...(objectTypeId ? { objectTypeId } : {}),
     };
 
