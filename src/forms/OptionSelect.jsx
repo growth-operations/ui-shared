@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Select, LoadingSpinner, Alert, Flex, Text, Link } from "@hubspot/ui-extensions";
 import { useToken } from "../sdk/index";
 import { getForms } from "../sdk/hubspot/forms";
 import { getLists } from "../sdk/hubspot/lists";
 import { getPipelines, getPipelineStages } from "../sdk/hubspot/pipeline";
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
+
+// How long to wait after the user stops typing before re-querying the
+// source. HubSpot's Select docs recommend debouncing onInput, which
+// fires on every keystroke.
+const SEARCH_DEBOUNCE_MS = 300;
 
 // OptionSelect — one shared HubSpot-options dropdown, replacing the per-app
 // FormSelector / SegmentSelector / PipelineStageSelector that every app
@@ -71,16 +76,34 @@ export function OptionSelect({
 }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState(null);
+  // The live search term, committed only after SEARCH_DEBOUNCE_MS of no
+  // typing — this is what actually triggers a re-fetch. `Select`'s
+  // `onInput` fires on every keystroke; debouncing here is what HubSpot's
+  // docs recommend instead of updating state directly in that callback.
+  const [searchTerm, setSearchTerm] = useState(opts.query ?? "");
+  const debounceRef = useRef(null);
   const { ensureValidToken } = useToken();
 
-  // Re-fetch when the source or its key args change (e.g. pipelineId).
+  const handleInput = (v) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchTerm(v), SEARCH_DEBOUNCE_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  // Re-fetch when the source, its key args, or the search term change.
   const depKey = JSON.stringify({
     source,
     pipelineId: opts.pipelineId,
     objectType: opts.objectType,
-    query: opts.query,
     objectTypeId: opts.objectTypeId,
+    searchTerm,
   });
 
   useStrictModeEffect(
@@ -90,18 +113,25 @@ export function OptionSelect({
         if (!token || !mounted.current) return;
         const loader =
           fetchOptions ?? SOURCES[source] ?? (async () => []);
-        const opted = await loader(context, token, opts);
+        const opted = await loader(context, token, { ...opts, query: searchTerm });
         if (mounted.current) setOptions(opted);
       } catch (e) {
         if (mounted.current) setError(String(e?.message ?? e));
       } finally {
-        if (mounted.current) setLoading(false);
+        if (mounted.current) {
+          setLoading(false);
+          setInitialLoad(false);
+        }
       }
     },
     [context, depKey]
   );
 
-  if (loading) {
+  // Only the first fetch replaces the whole component with a spinner.
+  // Re-fetches triggered by typing a search term keep `Select` mounted
+  // (with its current options) so the dropdown doesn't visibly close
+  // and the user doesn't lose focus/typed text mid-search.
+  if (loading && initialLoad) {
     return <LoadingSpinner size="small" label={`Loading ${label.toLowerCase()}…`} showLabel />;
   }
   if (error) {
@@ -123,6 +153,7 @@ export function OptionSelect({
         options={options}
         value={value ?? ""}
         onChange={(v) => onChange?.(v)}
+        onInput={handleInput}
       />
       {actionLinks.length > 0 && (
         <Flex direction="row" gap="small">

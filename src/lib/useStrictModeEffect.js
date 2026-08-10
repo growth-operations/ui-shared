@@ -4,9 +4,10 @@ import { useEffect, useRef } from 'react';
  * A custom hook that handles React Strict Mode's double-mount pattern for async effects.
  *
  * This hook prevents duplicate API calls in development by:
- * 1. Using a ref to track if the effect has already run
+ * 1. Using a ref to track if the effect has already run for the current dependencies
  * 2. Properly resetting state when the component unmounts during async operations
- * 3. Allowing the effect to run again when the component remounts
+ * 3. Allowing the effect to run again when the component remounts, OR when
+ *    the dependency array actually changes (e.g. a search term or selected id)
  *
  * @param {Function} effect - Async function to run. Will receive a cleanup object with:
  *   - mounted: ref to check if component is still mounted
@@ -36,11 +37,20 @@ import { useEffect, useRef } from 'react';
  */
 export function useStrictModeEffect(effect, dependencies = [], options = {}) {
   const fetchedRef = useRef(false);
+  const prevDependenciesRef = useRef(dependencies);
   const { setLoading } = options;
 
   useEffect(() => {
-    // Prevent duplicate fetches in React Strict Mode
-    if (fetchedRef.current) return;
+    // A genuine dependency change (e.g. a search term or selected
+    // pipeline) must always re-run the effect — only Strict Mode's
+    // same-render double-invocation should be suppressed. Without
+    // this, fetchedRef.current stays true forever after the first
+    // successful fetch and no dependency change ever re-fetches.
+    const dependenciesChanged = dependencies.some(
+      (dep, i) => dep !== prevDependenciesRef.current[i]
+    );
+    prevDependenciesRef.current = dependencies;
+    if (fetchedRef.current && !dependenciesChanged) return;
 
     const mounted = { current: true };
 
