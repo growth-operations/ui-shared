@@ -44,8 +44,43 @@ export function UsageTab({
   portalId,
   appName = "this app",
 }) {
-  const [data, setData] = useState(null);
   const [days, setDays] = useState("30");
+
+  return (
+    <Flex direction="column" gap="medium">
+      <Flex direction="row" justify="between" align="end">
+        <Heading>Usage</Heading>
+        <Select
+          label="Window"
+          name="window"
+          options={WINDOW_OPTIONS}
+          value={days}
+          onChange={setDays}
+        />
+      </Flex>
+
+      {/* key={days}: a window change must hard-remount everything below the
+          Select (Statistics + LineChart), not just re-render with new props.
+          LineChart is a HubSpot "remote component" (rendered outside this
+          iframe via HubSpot's own bridge) — a prop/data change alone was
+          confirmed NOT to update the rendered chart, even though the
+          backend series genuinely differs per window. The Select itself
+          stays OUTSIDE this key boundary so the control that triggers the
+          change is never torn down mid-interaction. */}
+      <UsageContent
+        key={days}
+        context={context}
+        basePath={basePath}
+        portalId={portalId}
+        appName={appName}
+        days={days}
+      />
+    </Flex>
+  );
+}
+
+function UsageContent({ context, basePath, portalId, appName, days }) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -76,12 +111,9 @@ export function UsageTab({
 
   if (error) {
     return (
-      <Flex direction="column" gap="medium">
-        <Heading>Usage</Heading>
-        <Alert title="Couldn't load usage" variant="warning">
-          <Text>{error}</Text>
-        </Alert>
-      </Flex>
+      <Alert title="Couldn't load usage" variant="warning">
+        <Text>{error}</Text>
+      </Alert>
     );
   }
 
@@ -97,17 +129,6 @@ export function UsageTab({
 
   return (
     <Flex direction="column" gap="medium">
-      <Flex direction="row" justify="between" align="end">
-        <Heading>Usage</Heading>
-        <Select
-          label="Window"
-          name="window"
-          options={WINDOW_OPTIONS}
-          value={days}
-          onChange={setDays}
-        />
-      </Flex>
-
       <Tile>
         <Statistics>
           <StatisticsItem label="Used (window)" number={usedInWindow} />
@@ -128,13 +149,6 @@ export function UsageTab({
           <Flex direction="column" gap="small">
             <Text format={{ fontWeight: "bold" }}>Credits used per day</Text>
             <LineChart
-              // key={days}: reported symptom was the chart not visibly
-              // changing when the window dropdown changed, even though the
-              // backend series does change (verified). LineChart is a remote
-              // component (rendered outside this iframe via HubSpot's own
-              // bridge), so force a full remount on window change rather than
-              // relying on its own prop-diffing to pick up the new data.
-              key={days}
               data={series}
               axes={{
                 x: { field: "date", fieldType: "datetime", label: "Day" },
