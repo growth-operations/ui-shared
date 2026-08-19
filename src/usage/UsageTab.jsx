@@ -128,6 +128,13 @@ export function UsageTab({
           <Flex direction="column" gap="small">
             <Text format={{ fontWeight: "bold" }}>Credits used per day</Text>
             <LineChart
+              // key={days}: reported symptom was the chart not visibly
+              // changing when the window dropdown changed, even though the
+              // backend series does change (verified). LineChart is a remote
+              // component (rendered outside this iframe via HubSpot's own
+              // bridge), so force a full remount on window change rather than
+              // relying on its own prop-diffing to pick up the new data.
+              key={days}
               data={series}
               axes={{
                 x: { field: "date", fieldType: "datetime", label: "Day" },
