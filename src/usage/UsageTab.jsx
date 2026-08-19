@@ -148,17 +148,6 @@ function UsageContent({ context, basePath, portalId, appName, days }) {
         <Tile>
           <Flex direction="column" gap="small">
             <Text format={{ fontWeight: "bold" }}>Credits used per day</Text>
-            {/* TEMP diagnostic — remove once the window-change bug is
-                root-caused. Renders straight from the fetched series with no
-                chart involved, so it proves whether new data is actually
-                arriving on a window change (this line updates) vs. only the
-                LineChart failing to reflect it (this line updates, chart
-                doesn't). If THIS line also doesn't change, the bug is
-                upstream of the chart (fetch/state), not the remote component. */}
-            <Text format={{ fontStyle: "italic" }}>
-              DEBUG window={days} points={series.length} first=
-              {series[0]?.date} last={series[series.length - 1]?.date}
-            </Text>
             <LineChart
               data={series}
               axes={{
