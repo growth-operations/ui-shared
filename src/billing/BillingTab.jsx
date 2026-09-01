@@ -358,8 +358,13 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
   // current tier and disable everything ranked below it ("Talk to sales to
   // switch") — the backend independently re-validates the same upgrade
   // direction (start_upgrade_redirect's tier_order check), so this is safe
-  // even if currentOrder were ever wrong. Downgrade/cancel/payment method/
-  // invoices still go through the Stripe Customer Portal link below.
+  // even if currentOrder were ever wrong. Downgrade is intentionally NOT
+  // self-serve (policy, not a Stripe portal gap): PlanCard's own
+  // "Talk to sales to switch" is the one and only downgrade path. Cancel /
+  // payment method / invoices still go through the Stripe Customer Portal
+  // link below — the footnote must not imply Manage subscription can also
+  // downgrade (some apps' Stripe portal config has subscription_update
+  // disabled anyway, so it silently couldn't even if we wanted it to).
   if (onPaidPlan) {
     const plans = state?.plans ?? [];
     const currentOrder = plans.find((p) => p.current)?.tier_order;
@@ -388,7 +393,7 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
             endpoint="upgrade/start"
             ctaLabel="Upgrade to"
             heading="Your plan"
-            footnote="Upgrade any time — the new tier applies immediately with prorated billing. To move to a lower tier, cancel, or update your payment method, use Manage subscription above."
+            footnote="Upgrade any time — the new tier applies immediately with prorated billing. To move to a lower tier, contact us. Use Manage subscription above to cancel or update your payment method."
             openIframe={openIframe}
           />
         ) : (
