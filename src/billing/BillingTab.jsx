@@ -350,13 +350,20 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 
-  // PAID: do NOT show the plan picker. The picker's "Choose" starts a NEW Stripe
-  // Checkout subscription — clicking another tier would create a SECOND
-  // subscription (double-bill), not switch in place. Plan changes (upgrade/
-  // downgrade/cancel) go through the Stripe Customer Portal, which swaps the
-  // subscription item with proration. So on a paid plan we show the meter + a
-  // "Manage subscription" portal link only. (Matches toast/sparkfly.)
+  // PAID: an UPGRADE-ONLY picker, same trial-archetype pattern as
+  // TrialSubscriptionBilling above — higher tiers are one-click in-app via
+  // /v1/billing/upgrade/start, which swaps the EXISTING subscription's item
+  // in place (never a new Checkout session), so a click here can never
+  // double-bill. currentOrder (this tier's rank) makes PlanCard mark the
+  // current tier and disable everything ranked below it ("Talk to sales to
+  // switch") — the backend independently re-validates the same upgrade
+  // direction (start_upgrade_redirect's tier_order check), so this is safe
+  // even if currentOrder were ever wrong. Downgrade/cancel/payment method/
+  // invoices still go through the Stripe Customer Portal link below.
   if (onPaidPlan) {
+    const plans = state?.plans ?? [];
+    const currentOrder = plans.find((p) => p.current)?.tier_order;
+    const showPicker = currentOrder != null && plans.length > 0;
     return (
       <Flex direction="column" gap="medium">
         <CreditMeter
@@ -372,10 +379,24 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
         >
           {portalStartUrl ? "Manage subscription" : "Preparing billing…"}
         </LoadingButton>
-        <Text format={{ fontStyle: "italic" }}>
-          Change or cancel your plan in Stripe — billing is managed across all
-          Growth Operations apps.
-        </Text>
+        {showPicker ? (
+          <PlanGrid
+            context={context}
+            state={state}
+            appKey={appKey}
+            currentOrder={currentOrder}
+            endpoint="upgrade/start"
+            ctaLabel="Upgrade to"
+            heading="Your plan"
+            footnote="Upgrade any time — the new tier applies immediately with prorated billing. To move to a lower tier, cancel, or update your payment method, use Manage subscription above."
+            openIframe={openIframe}
+          />
+        ) : (
+          <Text format={{ fontStyle: "italic" }}>
+            Change or cancel your plan in Stripe — billing is managed across all
+            Growth Operations apps.
+          </Text>
+        )}
       </Flex>
     );
   }
