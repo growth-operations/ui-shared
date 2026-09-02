@@ -24,14 +24,31 @@ export function CreditMeter({ entitlement, creditMeter }) {
   const used = meter?.used ?? ent?.used ?? 0;
   const remaining = meter?.remaining ?? ent?.remaining ?? Math.max(granted - used, 0);
 
+  // A paid plan is NEVER blocked — exceeding the included bucket is overage,
+  // not depletion (action_allowed_by_portal/consume_credits never gate a
+  // paid plan; see common.entitlements.credits.to_entitlement). So `depleted`
+  // must not fall back to raw `remaining <= 0` on a paid plan the way it does
+  // on the free tier — that raw check is exactly what showed a paying,
+  // already-subscribed customer a blocking "Depleted"/"out of credits" panel
+  // (confirmed live 2026-09-02). `over_included` is the distinct paid-plan
+  // signal for "you've used your included credits, extra usage is overage".
+  const onPaidPlan = !!ent?.plan;
   const lowThreshold = ent?.low_threshold ?? 0;
-  const depleted = ent?.depleted === true || remaining <= 0;
-  const low = !depleted && remaining <= lowThreshold;
+  const depleted = !onPaidPlan && (ent?.depleted === true || remaining <= 0);
+  const overIncluded =
+    onPaidPlan && (ent?.over_included === true || used > granted);
+  const low = !depleted && !overIncluded && remaining <= lowThreshold;
 
-  // healthy green / low yellow / depleted red.
-  const variant = depleted ? "error" : low ? "warning" : "success";
-  const tagVariant = depleted ? "danger" : low ? "warning" : "success";
-  const tagLabel = depleted ? "Depleted" : low ? "Running low" : "Healthy";
+  // healthy green / low or overage yellow / depleted red.
+  const variant = depleted ? "error" : overIncluded || low ? "warning" : "success";
+  const tagVariant = depleted ? "danger" : overIncluded || low ? "warning" : "success";
+  const tagLabel = depleted
+    ? "Depleted"
+    : overIncluded
+      ? "Over included"
+      : low
+        ? "Running low"
+        : "Healthy";
 
   const grantDaysLeft = ent?.grant_expires_at ? daysUntil(ent.grant_expires_at) : null;
 
@@ -65,15 +82,23 @@ export function CreditMeter({ entitlement, creditMeter }) {
           </Text>
         )}
 
-        {(depleted || low) && (
+        {(depleted || overIncluded || low) && (
           <Alert
-            title={depleted ? "You're out of credits" : "Running low on credits"}
+            title={
+              depleted
+                ? "You're out of credits"
+                : overIncluded
+                  ? "You've used your included credits"
+                  : "Running low on credits"
+            }
             variant={variant}
           >
             <Text>
               {depleted
                 ? "Pick a plan or buy more credits to keep going."
-                : "You're getting close to your limit — pick a plan to top up."}
+                : overIncluded
+                  ? "Extra usage this period is billed as overage at your plan's per-credit rate."
+                  : "You're getting close to your limit — pick a plan to top up."}
             </Text>
           </Alert>
         )}
