@@ -21,15 +21,19 @@ export class AppApiError extends Error {
   }
 }
 
-// context: the HubSpot extension context (must expose context.variables.BASE_URL)
-// path:    request path appended to BASE_URL, e.g. "/api/v1/settings"
-// method:  HTTP method (default "GET")
-// body:    plain object — NOT a JSON string (see header)
-export async function callAppApi(context, path, method = "GET", body = null) {
+// context:   the HubSpot extension context (must expose context.variables.BASE_URL)
+// path:      request path appended to BASE_URL, e.g. "/api/v1/settings"
+// method:    HTTP method (default "GET")
+// body:      plain object — NOT a JSON string (see header)
+// timeoutMs: hubspot.fetch client-side timeout (default 30000). Override for
+//   calls known to run long server-side (e.g. LLM-backed endpoints) — a
+//   timed-out request looks identical to a network failure to the caller,
+//   even when the backend goes on to complete successfully.
+export async function callAppApi(context, path, method = "GET", body = null, timeoutMs = 30000) {
   const url = `${context.variables.BASE_URL}${path}`;
 
   const response = await hubspot.fetch(url, {
-    timeout: 30000,
+    timeout: timeoutMs,
     method,
     // body is a plain object; hubspot.fetch serializes it. No custom headers —
     // Authorization is injected by the platform.
