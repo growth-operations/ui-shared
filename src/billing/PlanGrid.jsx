@@ -72,6 +72,17 @@ function PlanCard({
   // can't read whether the external meetings page is CSP-frameable, so the modal
   // is best-effort; the href fallback always works.
   openIframe = null,
+  // Canceled-account checkout grid (BillingTab passes this only for status
+  // "canceled"): the account's LAST tier is still stamped plan.current, so its
+  // card becomes the one-click "Restart <plan>" CTA targeting
+  // /v1/billing/restart/start (off-session recreate on the saved card, hosted
+  // Checkout fallback server-side) instead of the disabled "Current plan"
+  // marker, and the tag reads "Previous plan". The card's interval toggle stays
+  // live — restarting onto the OTHER interval is a legitimate switch (the old
+  // sub is gone; there is no in-place swap, so isIntervalSwitch is suppressed
+  // in this mode). If the backend doesn't mint a restart token (older common),
+  // the card degrades to the plain checkout CTA — same recovery, one extra page.
+  resumeCurrentPlan = false,
 }) {
   // Default this card to annual when it offers annual (cheaper-per-month story);
   // monthly-only tiers default to monthly. Both legs → show the toggle. The
@@ -107,10 +118,17 @@ function PlanCard({
   // a downgrade card is fully read-only.
   const canToggle = hasMonthly && hasAnnual && !isDowngrade;
   const [interval, setInterval] = useState(defaultInterval);
+  // Resume mode (canceled account): this card IS the restart CTA. The old
+  // subscription is gone, so the in-place interval-switch concept doesn't
+  // apply — toggling the interval just picks which price the restart creates.
+  // talk_to_sales tiers are excluded: they have no price to restart onto
+  // (custom pricing goes through sales regardless of account state).
+  const isResumeCard = resumeCurrentPlan && plan.current && !plan.talk_to_sales;
   // On the current card, toggling to a DIFFERENT interval than what's actually
   // billed is the in-place monthly<->annual switch; toggling back to the same
   // interval (or current_interval being unknown) is just "Current plan".
   const isIntervalSwitch =
+    !isResumeCard &&
     plan.current &&
     plan.current_interval != null &&
     ((interval === "annual" && plan.current_interval !== "year") ||
@@ -168,6 +186,20 @@ function PlanCard({
         `&return_url=${encodeURIComponent(returnUrl ?? "")}`
       : null;
 
+  // Resume mode: the restart endpoint recreates the canceled sub off-session
+  // on the card on file (falling back to hosted Checkout server-side when
+  // there's no usable card) — so this card's CTA can ALWAYS point at
+  // restart/start; the degradation when the backend predates the restart
+  // action is just the plain checkout CTA below.
+  const restartToken = billingActionTokens?.restart ?? null;
+  const restartUrl =
+    isResumeCard && billingBaseUrl && restartToken && leg?.price_id
+      ? `${billingBaseUrl}/v1/billing/restart/start` +
+        `?token=${encodeURIComponent(restartToken)}` +
+        `&price_id=${encodeURIComponent(leg.price_id)}` +
+        `&return_url=${encodeURIComponent(returnUrl ?? "")}`
+      : null;
+
   const features = plan.features ?? [];
   // Align the CTA buttons across cards. HubSpot's column Flex does NOT stretch
   // to the Tile height (AutoGrid equalizes the card height but flex={1}/justify
@@ -184,7 +216,9 @@ function PlanCard({
         <Flex direction="row" gap="small" align="center">
           <Heading>{plan.name ?? plan.tier}</Heading>
           {plan.current && (
-            <StatusTag variant="success">Current plan</StatusTag>
+            <StatusTag variant={isResumeCard ? "default" : "success"}>
+              {isResumeCard ? "Previous plan" : "Current plan"}
+            </StatusTag>
           )}
         </Flex>
 
@@ -239,7 +273,36 @@ function PlanCard({
             (lower than current, trial picker) => disabled + Talk-to-sales (not
             self-serve). talk_to_sales tier => contact link. Otherwise
             pre-create-then-link checkout/upgrade for the selected interval. */}
-        {plan.current && !isIntervalSwitch ? (
+        {isResumeCard && restartUrl ? (
+          // One-click restart: recreate the canceled sub on the saved card
+          // (off-session) via /v1/billing/restart/start — no checkout page.
+          // The selected interval's price is what gets restarted onto.
+          <Button
+            href={{ url: restartUrl, external: true }}
+            variant="primary"
+          >
+            Restart {plan.name ?? plan.tier}
+          </Button>
+        ) : isResumeCard && !restartUrl && !leg ? (
+          // Resume mode but no price for the selected interval and no restart
+          // URL to fall back on — same guidance as the generic no-leg case.
+          <Text format={{ fontStyle: "italic" }}>
+            Not available {interval === "annual" ? "annually" : "monthly"}
+          </Text>
+        ) : isResumeCard && !restartUrl ? (
+          // Backend predates the restart action (no restart token minted) —
+          // degrade to the plain checkout CTA; same recovery, one extra page.
+          <Button
+            href={startUrl ? { url: startUrl, external: true } : undefined}
+            disabled={!startUrl}
+            variant="primary"
+          >
+            {ctaLabel} {plan.name ?? plan.tier}
+          </Button>
+        ) : plan.current && !isIntervalSwitch && !resumeCurrentPlan ? (
+          // Inert "Current plan" marker — suppressed in resume mode, where a
+          // canceled account's previous tier must stay actionable (restart
+          // above, checkout fallback, or Talk-to-sales for custom tiers).
           <Button disabled>Current plan</Button>
         ) : plan.current && isIntervalSwitch ? (
           <Button
@@ -335,6 +398,11 @@ export function PlanGrid({
   // actions.openIframeModal (from the hosting card root) — lets a talk_to_sales
   // tier open its meetings_url scheduler in an in-card modal. Optional.
   openIframe = null,
+  // Canceled-account grid (BillingTab, status "canceled" only): the account's
+  // last tier (still stamped `current`) renders as a one-click "Restart
+  // <plan>" CTA via /v1/billing/restart/start instead of the disabled
+  // "Current plan" marker. See PlanCard.
+  resumeCurrentPlan = false,
 }) {
   const plans = plansOverride ?? state?.plans ?? [];
 
@@ -377,6 +445,7 @@ export function PlanGrid({
             ctaLabel={ctaLabel}
             currentOrder={currentOrder}
             openIframe={openIframe}
+            resumeCurrentPlan={resumeCurrentPlan}
           />
         ))}
       </AutoGrid>
