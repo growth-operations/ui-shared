@@ -11,8 +11,8 @@
 // token these endpoints don't expect).
 import { hubspot, logger } from "@hubspot/ui-extensions";
 
-// Re-mint a fresh { portal, checkout, upgrade } token set from a still-valid
-// one. See billing.py's /v1/billing/refresh-tokens: it verifies `token`
+// Re-mint a fresh { portal, checkout, upgrade, restart } token set from a
+// still-valid one. See billing.py's /v1/billing/refresh-tokens: it verifies `token`
 // (whichever action it authorizes — BillingTab always holds/passes `portal`)
 // and returns a brand-new set signed for the same app_key/portal_id. Throws
 // on a 401 (token already expired) — the caller's next /v1/home load is the

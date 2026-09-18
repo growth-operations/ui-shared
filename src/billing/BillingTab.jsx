@@ -122,6 +122,27 @@ function StatusPanel({ entitlement }) {
   }
 
   if (status === "active") {
+    // Scheduled-cancel (cancel_at_period_end) is a WARNING, not a success:
+    // access ends at the period boundary unless the customer acts. The "Keep
+    // my subscription" button lives beside this panel (TrialSubscriptionBilling
+    // has the billing_base_url + restart token; StatusPanel only sees the
+    // entitlement).
+    if (cancel_at_period_end) {
+      return (
+        <Alert variant="warning">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>
+              Your subscription is set to cancel
+            </Text>
+            <Text>
+              It stays active until {fmtDate(current_period_end)}, then your
+              data stops syncing. Changed your mind? Keep it below — no
+              re-checkout needed.
+            </Text>
+          </Flex>
+        </Alert>
+      );
+    }
     return (
       <Alert variant="success">
         <Flex direction="column" gap="extra-small">
@@ -130,11 +151,6 @@ function StatusPanel({ entitlement }) {
             Your subscription is active. Next renewal:{" "}
             {fmtDate(current_period_end)}.
           </Text>
-          {cancel_at_period_end && (
-            <Text format={{ fontStyle: "italic" }}>
-              Cancels at the end of the current period.
-            </Text>
-          )}
         </Flex>
       </Alert>
     );
@@ -182,7 +198,7 @@ function StatusPanel({ entitlement }) {
     const resumeCta =
       mode === "credits"
         ? "Choose a plan below to start a new subscription."
-        : "Choose a plan below to start a new subscription and resume syncing your data.";
+        : "Restart your previous plan below in one click, or choose a different one — either way your data starts syncing again.";
     return (
       <Alert variant="warning">
         <Flex direction="column" gap="extra-small">
@@ -245,6 +261,20 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
         `&return_url=${encodeURIComponent(returnUrl)}`
       : null;
 
+  // "Keep my subscription" for a sub flagged cancel_at_period_end: hits
+  // /v1/billing/restart/start with NO price_id — the uncancel branch flips the
+  // flag off in place (the one true resume Stripe supports) and 303s back
+  // here. Null (button hidden, not disabled) until the restart token exists —
+  // an older backend that doesn't mint it simply doesn't show the button; the
+  // Stripe portal still offers the same renewal as a fallback.
+  const restartToken = state?.billing_action_tokens?.restart ?? null;
+  const keepSubscriptionUrl =
+    base && restartToken
+      ? `${base}/v1/billing/restart/start` +
+        `?token=${encodeURIComponent(restartToken)}` +
+        `&return_url=${encodeURIComponent(returnUrl)}`
+      : null;
+
   // Tier picker — every status needs ONE of two distinct modes, never both:
   //   trialing                    -> UPGRADE mode: a trialing sub already
   //     exists, so a higher-tier click swaps its item in place
@@ -261,8 +291,8 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
   // (upgrade) or doesn't (checkout) — showing the upgrade endpoint with no
   // real subscription behind it would 404/error at click time.
   const isTrialing = ent.status === "trialing";
-  const needsCheckout =
-    ent.status === "pending_purchase" || ent.status === "canceled";
+  const isCanceled = ent.status === "canceled";
+  const needsCheckout = ent.status === "pending_purchase" || isCanceled;
   const plans = state?.plans ?? [];
   const currentOrder = isTrialing
     ? plans.find((p) => p.current)?.tier_order
@@ -291,6 +321,16 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
 
       <StatusPanel entitlement={state?.entitlement} />
 
+      {/* Scheduled-cancel on an ACTIVE sub: one click flips
+          cancel_at_period_end off in place (no re-checkout, no new sub) —
+          the /v1/billing/restart/start uncancel branch. Rendered only when
+          the restart token exists (see keepSubscriptionUrl above). */}
+      {ent.status === "active" && ent.cancel_at_period_end && keepSubscriptionUrl && (
+        <Button href={{ url: keepSubscriptionUrl, external: true }} variant="primary">
+          Keep my subscription
+        </Button>
+      )}
+
       <Text format={{ fontStyle: "italic" }}>
         {needsCheckout
           ? "Choose a plan below to resume. Once you have an active subscription, use the link above to manage payment methods or view invoices."
@@ -313,12 +353,27 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
           currentOrder={currentOrder}
           endpoint={needsCheckout ? "checkout/start" : "upgrade/start"}
           ctaLabel={needsCheckout ? "Choose" : "Upgrade to"}
-          heading={needsCheckout ? "Choose a plan to resume" : "Your plan"}
-          footnote={
-            needsCheckout
-              ? "Choose a plan to start a new subscription and resume syncing your data."
-              : "Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
+          heading={
+            isCanceled
+              ? "Resume your subscription"
+              : needsCheckout
+                ? "Choose a plan to resume"
+                : "Your plan"
           }
+          footnote={
+            isCanceled
+              ? "Restart charges your card on file and resumes syncing immediately — no checkout page. If the card needs updating, we'll send you to Stripe to finish. You can also switch to a different plan or billing interval."
+              : needsCheckout
+                ? "Choose a plan to start a new subscription and resume syncing your data."
+                : "Upgrade any time during your trial — your trial end date stays the same, and the new tier applies when it converts. To move to a lower tier, talk to sales."
+          }
+          // Canceled only: the account's last tier is still stamped
+          // `current` (account.plan persists after cancel), so its card
+          // becomes the one-click "Restart <plan>" CTA (/v1/billing/
+          // restart/start — recreate off-session on the saved card, with a
+          // hosted-Checkout fallback server-side) instead of a disabled
+          // "Current plan" marker. Other tiers stay plain checkout.
+          resumeCurrentPlan={isCanceled}
           openIframe={openIframe}
         />
       )}
