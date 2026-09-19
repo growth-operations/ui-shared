@@ -125,3 +125,29 @@ Use `cta_url` (external/full deep link) only for genuinely external targets
   each app exposes `GET /api/v1/home` that calls it. trial_subscription mode maps onto the
   existing Account billing block + is_entitled. credits mode is net-new (balance model, grant,
   decrement, credit-aware is_entitled) — built when each app flips to the credit model.
+
+## Subscription-canceled gate
+
+For installs whose subscription is CANCELED (or uninstalled), every interactive
+surface hard-blocks with a "No active subscription" screen + Go-to-Billing link.
+Two pieces, both implemented in `common.entitlements.fastapi`:
+
+**Mount-time check** — `GET {base}/v1/entitlement?portalId={id}` (verify_hubspot),
+always 200:
+
+```jsonc
+{
+  "entitled": false,                 // false ONLY for canceled/uninstalled/missing install
+  "status": "canceled",              // AppInstallStatus | null
+  "billing_url": "https://app.hubspot.com/app/{portal_id}/{app_id}/billing"
+}
+```
+
+**Per-endpoint enforcement** — gated routes raise `SubscriptionCanceled` →
+`402 {"detail": str, "code": "subscription_canceled", "billing_url": str}`.
+
+Clients: cards wrap their tree in `<SubscriptionGate>` (src/billing/SubscriptionGate.jsx);
+browser extensions key off the 402 `code`. The gate is deliberately NARROWER than
+`entitlement.entitled` — past_due / pending_purchase / paused keep the banner UX and
+are NOT 402'd. Both layers fail open on infrastructure errors (a Firestore/network
+blip must not hard-down paying customers).
