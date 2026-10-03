@@ -129,7 +129,7 @@ export function resolveCreditMeter(entitlement, creditMeter) {
       title: "You're out of credits",
       message: onPaidPlan
         ? "Actions are paused until your next billing period or a successful top-up."
-        : "Pick a plan or buy more credits to keep going.",
+        : "Choose a plan to resume your use.",
     };
   } else if (thresholdState === "top_up_failed") {
     alert = {

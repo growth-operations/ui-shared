@@ -199,7 +199,7 @@ describe("resolveCreditMeter", () => {
     expect(view.alert).toEqual({
       variant: "error",
       title: "You're out of credits",
-      message: "Pick a plan or buy more credits to keep going.",
+      message: "Choose a plan to resume your use.",
     });
   });
 
