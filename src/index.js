@@ -44,6 +44,12 @@ export {
   STATUS_VARIANT,
 } from "./lib/format";
 export { useStrictModeEffect } from "./lib/useStrictModeEffect";
+export {
+  hasTopUpBank,
+  resolveCreditMeter,
+  resolveBillingBanner,
+  parseLimitInput,
+} from "./lib/creditDisplay";
 
 // HubSpot URL builders (app.hubspot.com record/property/list links).
 export {
@@ -65,6 +71,8 @@ export {
   AppApiError,
   getAlerts,
   dismissAlert,
+  getTopUps,
+  setBillingLimit,
   getSettings,
   updateSettings,
   makeSettingsApi,

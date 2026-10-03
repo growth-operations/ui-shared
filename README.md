@@ -127,6 +127,9 @@ Built on top of `callAppApi`:
 - `getAlerts(context, params)` / `dismissAlert(context, alertId)` — the generic
   `/api/v1/alerts` surface (`offset`, `limit`, `orderBy`, `orderDirection`,
   `filterField`, `filterValue`).
+- `getTopUps(context, { appKey, portalId })` / `setBillingLimit(context, { appKey, portalId, limitCents })` —
+  the base service's top-up billing routes (`/v1/hubspot/app_pages/{app}/billing/top-ups`
+  and `/billing/limit`; see CONTRACT.md).
 
 ### HubSpot public API — `callHubSpotApi`
 
@@ -186,7 +189,7 @@ only in a CRM-card context.
 ### SDK exports
 
 `callAppApi`, `AppApiError`, `getSettings`, `updateSettings`, `makeSettingsApi`,
-`getAlerts`, `dismissAlert`, `callHubSpotApi`, `buildHubSpotUrl`,
+`getAlerts`, `dismissAlert`, `getTopUps`, `setBillingLimit`, `callHubSpotApi`, `buildHubSpotUrl`,
 `HubSpotApiError`, `getObjectProperties`, `getProperties`, `updateProperties`,
 `getForms`, `getLists`, `getPipelines`, `getPipelineStages`,
 `computeStageChanges`, `getShortLivedToken`, `isTokenExpired`, `TokenProvider`,

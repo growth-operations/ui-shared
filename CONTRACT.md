@@ -34,7 +34,20 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     "grant_expires_at": "2026-07-18T...", // 100 free credits / 30 days; null for paid allowance
     "low_threshold": 10,              // drives "running low" nudge
     "depleted": false,
-    "plan": null                      // plan name once on a paid monthly allowance
+    "plan": null,                     // plan name once on a paid monthly allowance
+
+    // --- Top-up ("bank") billing model (topup-model accounts only) ---
+    // granted/used/remaining become a COMBINED pool+bank display: granted =
+    // period pool + bank remaining, used = granted - remaining (so after a
+    // period reset with bank left the meter reads e.g. "0 of 1,700").
+    // Metered-model accounts keep the raw semantics (used grows past granted
+    // as overage) and only ever see threshold_state "healthy"/"depleted".
+    "top_up_bank_remaining": 0,       // never-expiring prepaid credits left
+    "last_top_up_at": null,           // ISO datetime of the last top-up grant
+    // "healthy" | "top_up_pending" | "top_up_failed" | "limit_reached" |
+    // "depleted". "depleted" is the ONLY hard-blocked state; over_included
+    // (metered paid overage) always means "paying overage, not blocked".
+    "threshold_state": "healthy"
   },
 
   // INSTALL/ACTIVATION PROGRESS — common (today in /v1/state). Drives InstallProgress.
@@ -151,3 +164,18 @@ browser extensions key off the 402 `code`. The gate is deliberately NARROWER tha
 `entitlement.entitled` — past_due / pending_purchase / paused keep the banner UX and
 are NOT 402'd. Both layers fail open on infrastructure errors (a Firestore/network
 blip must not hard-down paying customers).
+
+## Top-up billing endpoints (base service)
+
+For credit apps on the top-up ("bank") model, the base service exposes two
+app-pages billing routes (verify_hubspot — the platform injects
+Authorization; `portalId` rides as a query param like the other base-hosted
+app_pages routes). ui-shared's `getTopUps` / `setBillingLimit`
+(src/sdk/app/topUps.js) call them via `callAppApi`:
+
+- `GET /v1/hubspot/app_pages/{app}/billing/top-ups` →
+  `{ "top_ups": [{ "at", "credits", "price_cents", "period_key" }] }`
+  (newest first). Drives BillingTab's "Top-up history" section.
+- `POST /v1/hubspot/app_pages/{app}/billing/limit` with
+  `{ "limit_cents": int | null }` — set/clear the per-period auto top-up
+  spend cap. Drives BillingTab's "Billing limit" control.

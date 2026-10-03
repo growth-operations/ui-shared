@@ -4,6 +4,7 @@
 // App backend (context.variables.BASE_URL) via hubspot.fetch.
 export { callAppApi, AppApiError } from "./app/base";
 export { getAlerts, dismissAlert } from "./app/alerts";
+export { getTopUps, setBillingLimit } from "./app/topUps";
 export { getSettings, updateSettings, makeSettingsApi } from "./app/settings";
 export {
   strToBase64,
