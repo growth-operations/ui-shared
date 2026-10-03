@@ -482,7 +482,19 @@ function TopUpHistory({ context, appKey }) {
 // a new one (USD input -> cents), or clears it, via the base service's
 // POST /v1/hubspot/app_pages/{app}/billing/limit. Success/error feedback is an
 // inline Alert, consistent with the rest of this tab.
-function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
+//
+// The POST requires a billing action token (?token=) on top of verify_hubspot
+// — billingActionToken should be the (interval-refreshed)
+// state.billing_action_tokens.portal. Without it (an older backend serving
+// /v1/home without minted tokens) the set/clear buttons stay disabled rather
+// than failing with a 401 — the same "hidden until token exists" posture as
+// the restart link.
+function BillingLimitControl({
+  context,
+  appKey,
+  currentLimitCents = null,
+  billingActionToken = null,
+}) {
   const [limitCents, setLimitCents] = useState(currentLimitCents ?? null);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -492,6 +504,8 @@ function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
   useEffect(() => {
     setLimitCents(currentLimitCents ?? null);
   }, [currentLimitCents]);
+
+  const canSubmit = !saving && !!billingActionToken;
 
   const save = async () => {
     const parsed = parseLimitInput(value);
@@ -506,6 +520,7 @@ function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
         appKey,
         portalId: context?.portal?.id,
         limitCents: parsed.limitCents,
+        token: billingActionToken,
       });
       setLimitCents(parsed.limitCents);
       setValue("");
@@ -531,6 +546,7 @@ function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
         appKey,
         portalId: context?.portal?.id,
         limitCents: null,
+        token: billingActionToken,
       });
       setLimitCents(null);
       setNotice({
@@ -569,17 +585,23 @@ function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
         <LoadingButton
           variant="primary"
           loading={saving}
-          disabled={saving || !value.trim()}
+          disabled={!canSubmit || !value.trim()}
           onClick={save}
         >
           Set limit
         </LoadingButton>
         {limitCents != null && (
-          <Button variant="secondary" disabled={saving} onClick={clear}>
+          <Button variant="secondary" disabled={!canSubmit} onClick={clear}>
             Clear limit
           </Button>
         )}
       </Flex>
+      {!billingActionToken && (
+        <Text format={{ fontStyle: "italic" }}>
+          Preparing billing… the limit controls unlock in a moment. Refresh the
+          page if this persists.
+        </Text>
+      )}
       {notice && (
         <Alert
           variant={notice.variant}
@@ -592,7 +614,8 @@ function BillingLimitControl({ context, appKey, currentLimitCents = null }) {
   );
 }
 
-function CreditsBilling({ context, state, appKey, openIframe = null }) {
+// Exported for tests (the billing_model gating of the top-up sections).
+export function CreditsBilling({ context, state, appKey, openIframe = null }) {
   const onPaidPlan = !!state?.entitlement?.plan;
 
   // Direct external link to the billing service's GET /v1/billing/portal/start,
@@ -668,23 +691,25 @@ function CreditsBilling({ context, state, appKey, openIframe = null }) {
             Growth Operations apps.
           </Text>
         )}
-        {/* Top-up ("bank") model surfaces. Rendered once the backend carries
-            the top-up contract (threshold_state present) — on older backends
-            the endpoints don't exist, so the sections stay hidden. The limit
-            only governs automatic top-ups (topup billing model); metered paid
-            accounts see their (empty) history and the cap control, which takes
-            effect if the account is migrated to top-ups. */}
-        {typeof state?.entitlement?.threshold_state === "string" && (
+        {/* Top-up ("bank") model surfaces — gated on the entitlement arm's
+            billing_model discriminator. "metered" accounts never top up, so
+            the sections would be permanently empty; backends that predate the
+            field don't have the endpoints at all. Both cases hide the
+            sections (the safe direction — no dead UI). */}
+        {state?.entitlement?.billing_model === "topup" && (
           <>
             <TopUpHistory context={context} appKey={appKey} />
             <BillingLimitControl
               context={context}
               appKey={appKey}
-              currentLimitCents={
-                state?.entitlement?.billing_limit_cents ??
-                state?.entitlement?.top_up_limit_cents ??
-                null
-              }
+              // Populated for all accounts on the current contract
+              // (int cents | null; absent on older backends = no cap).
+              currentLimitCents={state?.entitlement?.billing_limit_cents ?? null}
+              // The limit POST's second auth dep (see setBillingLimit). `state`
+              // here is BillingTab's interval-refreshed copy, so this token is
+              // re-minted every 3 minutes — a long-open tab never POSTs an
+              // expired one.
+              billingActionToken={state?.billing_action_tokens?.portal ?? null}
             />
           </>
         )}

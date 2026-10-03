@@ -29,6 +29,39 @@ export function renderComponent(Component, props) {
   return resolve(Component(props));
 }
 
+// Shallow variant for components whose children use hooks (BillingTab's
+// sub-components): only the mocked ui-extensions markers (they carry
+// displayName) and Fragments are resolved; real components are wrapped as
+// { component: <name>, ...props } WITHOUT invoking them, so hookful children
+// never run outside React. findAll/textOf work on the result either way.
+export function shallowResolve(node) {
+  if (node == null || typeof node !== "object") return node;
+  if (Array.isArray(node)) return node.map(shallowResolve);
+  if (React.isValidElement(node)) {
+    const { type, props } = node;
+    if (type === React.Fragment) {
+      return { component: "Fragment", children: shallowResolve(props.children) };
+    }
+    if (typeof type === "function" && type.displayName) {
+      return shallowResolve(type(props));
+    }
+    return {
+      component:
+        typeof type === "function" ? type.name || "Anonymous" : String(type),
+      ...props,
+      children: shallowResolve(props.children),
+    };
+  }
+  if (typeof node.component === "string") {
+    return { ...node, children: shallowResolve(node.children) };
+  }
+  return node;
+}
+
+export function renderShallow(Component, props) {
+  return shallowResolve(Component(props));
+}
+
 // Every string/number leaf in the tree, concatenated (JSX splits text and
 // interpolations into adjacent children).
 export function textOf(node) {

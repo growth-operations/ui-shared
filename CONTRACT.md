@@ -47,7 +47,14 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // "healthy" | "top_up_pending" | "top_up_failed" | "limit_reached" |
     // "depleted". "depleted" is the ONLY hard-blocked state; over_included
     // (metered paid overage) always means "paying overage, not blocked".
-    "threshold_state": "healthy"
+    "threshold_state": "healthy",
+    // "metered" | "topup" — the billing model in force. Drives which Billing
+    // tab sections render (top-up history + billing limit show only for
+    // "topup"). Absent on backends that predate the top-up contract.
+    "billing_model": "metered",
+    // The per-period auto top-up spend cap, in cents (null/absent = uncapped).
+    // Populated for ALL accounts; drives the Billing tab's limit control.
+    "billing_limit_cents": null
   },
 
   // INSTALL/ACTIVATION PROGRESS — common (today in /v1/state). Drives InstallProgress.
@@ -178,4 +185,10 @@ app_pages routes). ui-shared's `getTopUps` / `setBillingLimit`
   (newest first). Drives BillingTab's "Top-up history" section.
 - `POST /v1/hubspot/app_pages/{app}/billing/limit` with
   `{ "limit_cents": int | null }` — set/clear the per-period auto top-up
-  spend cap. Drives BillingTab's "Billing limit" control.
+  spend cap. Drives BillingTab's "Billing limit" control. This route has a
+  SECOND auth dep beyond verify_hubspot: a required `token` query param
+  carrying a billing action token (common.billing.action_token; any action in
+  the portal/checkout/upgrade/restart vocabulary verifies) — the same proof
+  of recent in-app billing-surface access the /v1/billing/*/start endpoints
+  require. ui-shared passes the (interval-refreshed)
+  `billing_action_tokens.portal`.
