@@ -98,6 +98,27 @@ describe("CreditMeter", () => {
     expect(textOf(tree)).toContain("Additional credits (never expire): 700 of 1700 left");
   });
 
+  it("shows a warning 'Running low' tag (not a red bar) when the bank is <=20% full", () => {
+    const tree = renderComponent(CreditMeter, {
+      entitlement: topupWithBank({
+        granted: 1200,
+        used: 1000,
+        remaining: 200,
+        top_up_bank_remaining: 200,
+        top_up_bank_granted: 1000,
+      }),
+    });
+    const bars = findAll(tree, "ProgressBar");
+    // Bank at exactly 20%: bar caps at WARNING (HubSpot's danger variant
+    // paints the whole track red — a low gauge would read as full)…
+    expect(bars[1].variant).toBe("warning");
+    expect(bars[1].value).toBe(200);
+    // …and the urgency rides a warning StatusTag on the bank line instead.
+    const tags = findAll(tree, "StatusTag");
+    expect(tags.map((t) => t.children)).toContain("Running low");
+    expect(tags.find((t) => t.children === "Running low").variant).toBe("warning");
+  });
+
   it("colors each bar by its own fill level, not the account state", () => {
     // Jasper's case: pool 96% used with a FULL bank — the account is Healthy
     // (success tag) but the pool bar must be danger and the bank bar success.
@@ -120,7 +141,7 @@ describe("CreditMeter", () => {
     expect(bars[1].variant).toBe("success"); // bank: 1000/1000 = full
   });
 
-  it("pins the bank gauge ladder at the component level (50% warning, 20% danger)", () => {
+  it("pins the bank gauge ladder at the component level (50% warning, never danger)", () => {
     const bankVariant = (bankRemaining) => {
       const tree = renderComponent(CreditMeter, {
         entitlement: topupWithBank({
@@ -136,7 +157,7 @@ describe("CreditMeter", () => {
     expect(bankVariant(510)).toBe("success"); // >50% full
     expect(bankVariant(500)).toBe("warning"); // 50% — top of the warning band
     expect(bankVariant(210)).toBe("warning"); // 21% — still warning
-    expect(bankVariant(200)).toBe("danger"); // 20% — "running out"
+    expect(bankVariant(200)).toBe("warning"); // 20% — NEVER danger (the track would paint full red); the "Running low" tag carries it
   });
 
   it("pins the pool depletion ladder at the component level (80% warning, 95% danger)", () => {

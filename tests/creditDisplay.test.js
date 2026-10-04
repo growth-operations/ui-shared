@@ -125,6 +125,7 @@ describe("resolveCreditMeter", () => {
     expect(view.bank).toEqual({
       bankRemaining: 700,
       bankGranted: 1000,
+      bankLow: false,
       poolGrant: 1000,
       poolRemaining: 1000,
       poolUsed: 0,
@@ -146,6 +147,7 @@ describe("resolveCreditMeter", () => {
     expect(view.bank).toEqual({
       bankRemaining: 500,
       bankGranted: 1000,
+      bankLow: false,
       poolGrant: 1000,
       poolRemaining: 0,
       poolUsed: 1000,
@@ -165,6 +167,7 @@ describe("resolveCreditMeter", () => {
     expect(view.bank).toEqual({
       bankRemaining: 1000,
       bankGranted: 1000,
+      bankLow: false,
       poolGrant: 1000,
       poolRemaining: 600,
       poolUsed: 400,
@@ -343,10 +346,13 @@ describe("resolveCreditMeter", () => {
     expect(single(95)).toBe("danger");
   });
 
-  it("colors the bank bar by its own remaining level (50/20 ladder)", () => {
-    // Boundaries: >50% full success, 20–50% warning, <=20% danger. Bank
-    // granted 1000; pool 1000 untouched (granted = 1000 + bankRemaining).
-    const bankVariant = (bankRemaining) =>
+  it("colors the bank bar by its own remaining level (50 rung; NO danger — the track paints full red)", () => {
+    // Boundaries: >50% full success, <=50% warning. Never danger: HubSpot's
+    // ProgressBar danger variant paints the WHOLE track red, so a low level
+    // gauge would read as a full bar (2026-10-04 screenshot review); <=20%
+    // gets the bankLow "Running low" tag instead. Bank granted 1000; pool
+    // 1000 untouched (granted = 1000 + bankRemaining).
+    const view = (bankRemaining) =>
       resolveCreditMeter(
         topupWithBank({
           granted: 1000 + bankRemaining,
@@ -356,11 +362,15 @@ describe("resolveCreditMeter", () => {
           top_up_bank_granted: 1000,
         }),
         null
-      ).bankBarVariant;
-    expect(bankVariant(510)).toBe("success");
-    expect(bankVariant(500)).toBe("warning");
-    expect(bankVariant(210)).toBe("warning");
-    expect(bankVariant(200)).toBe("danger");
+      );
+    expect(view(510).bankBarVariant).toBe("success");
+    expect(view(500).bankBarVariant).toBe("warning");
+    expect(view(210).bankBarVariant).toBe("warning");
+    expect(view(200).bankBarVariant).toBe("warning"); // NOT danger
+    // bankLow rides at <= 20% — integer cross-multiplication on the rung.
+    expect(view(200).bank.bankLow).toBe(true);
+    expect(view(201).bank.bankLow).toBe(false);
+    expect(view(500).bank.bankLow).toBe(false);
   });
 
   it("depleted account: the tag says Depleted AND the empty pool bar is danger", () => {
