@@ -51,15 +51,41 @@ export function hasTopUpBank(ent) {
 //   thresholdState       — the arm's threshold_state, or null on a backend
 //                          that predates it
 //   depleted/overIncluded/low — mutually-exclusive urgency flags
-//   tagVariant/tagLabel  — StatusTag rendering
-//   barVariant           — ProgressBar sentiment for the pool/single bar:
-//                          the tag's depletion mapping minus "info"
-//                          (ProgressBar only takes success/warning/danger;
-//                          top_up_pending is calm/positive, so success).
-//                          The bank bar is always "success" (a never-expiring
-//                          balance has no negative direction).
+//   tagVariant/tagLabel  — StatusTag rendering (ACCOUNT state — unchanged)
+//   poolBarVariant       — ProgressBar sentiment for the pool bar (and the
+//                          no-bank legacy single bar), colored by the POOL'S
+//                          OWN fill level, not the account state
+//   bankBarVariant       — same for the bank level gauge (null when there is
+//                          no bank section)
 //   alert                — { variant, title, message } or null
 //   grantExpiresAt       — pass-through for the free-grant countdown
+//
+// BAR COLORS ARE PER-BAR FILL LEVELS (Jasper 2026-10): a pool at 99% used
+// with a full bank must NOT render green just because the account is healthy
+// — each bar colors by its own level; the StatusTag keeps the account-state
+// colors. Thresholds mirror the backend's ~80/95 low-credit alert ladder
+// (common.entitlements LOW/DEPLETED banding). Comparisons are integer
+// cross-multiplications — no float fuzz at the 80/95/50/20 boundaries.
+//
+//   pool (DEPLETION meter, value = poolUsed of poolGrant):
+//     success when used < 80%, warning at >= 80%, danger at >= 95%.
+//   bank (LEVEL gauge, value = bankRemaining of bankGranted):
+//     success above 50% full, warning at 20–50%, danger at <= 20%
+//     ("running out") — a draining bank is warning-worthy even though it
+//     never expires.
+function poolBarVariantFor(poolUsed, poolGrant) {
+  if (!(poolGrant > 0)) return "success"; // no grant: nothing to deplete
+  if (poolUsed * 100 >= 95 * poolGrant) return "danger";
+  if (poolUsed * 100 >= 80 * poolGrant) return "warning";
+  return "success";
+}
+
+function bankBarVariantFor(bankRemaining, bankGranted) {
+  if (!(bankGranted > 0)) return "success"; // degraded text-only line renders no bar
+  if (bankRemaining * 100 <= 20 * bankGranted) return "danger";
+  if (bankRemaining * 100 <= 50 * bankGranted) return "warning";
+  return "success";
+}
 export function resolveCreditMeter(entitlement, creditMeter) {
   const ent = entitlement?.mode === "credits" ? entitlement : null;
   const meter = creditMeter ?? null;
@@ -144,12 +170,16 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     tagLabel = "Healthy";
   }
 
-  // ProgressBar sentiment for the pool bar (and the no-bank single bar):
-  // color-coded by depletion — success when healthy, warning at/below the
-  // low threshold (and for the other warning-level states), danger when
-  // depleted/top-up-failed. ProgressBar has no "info" variant, so the calm
-  // top_up_pending state renders success.
-  const barVariant = tagVariant === "info" ? "success" : tagVariant;
+  // ProgressBar sentiments — each bar colored by ITS OWN fill level (see the
+  // header block). The pool bar (and the no-bank legacy single bar) reads the
+  // pool's depletion ratio; the bank bar reads the bank's remaining level.
+  const poolBarVariant = poolBarVariantFor(
+    bank ? bank.poolUsed : used,
+    bank ? bank.poolGrant : granted
+  );
+  const bankBarVariant = bank
+    ? bankBarVariantFor(bank.bankRemaining, bank.bankGranted)
+    : null;
 
   // The inline meter alert mirrors the banner's messaging at the point of
   // glance. Legacy branches keep their pre-top-up copy byte-for-byte.
@@ -202,7 +232,8 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     low,
     tagVariant,
     tagLabel,
-    barVariant,
+    poolBarVariant,
+    bankBarVariant,
     alert,
     grantExpiresAt: ent?.grant_expires_at ?? null,
   };

@@ -84,16 +84,73 @@ describe("CreditMeter", () => {
     });
     const bars = findAll(tree, "ProgressBar");
     expect(bars).toHaveLength(2);
-    // Pool — depletion meter over the period grant.
+    // Pool — depletion meter over the period grant. 0% used -> success.
     expect(bars[0].title).toBe("0 of 1000 used");
     expect(bars[0].maxValue).toBe(1000);
-    // Bank — level gauge: value is REMAINING (refills on purchase), always
-    // green (a never-expiring balance has no negative direction).
+    expect(bars[0].variant).toBe("success");
+    // Bank — level gauge: value is REMAINING (refills on purchase), colored by
+    // ITS OWN level: 700/1700 = 41% full -> warning (20–50% band), NOT the
+    // old hardcoded success.
     expect(bars[1].title).toBe("700 of 1700 left");
     expect(bars[1].value).toBe(700);
     expect(bars[1].maxValue).toBe(1700);
-    expect(bars[1].variant).toBe("success");
+    expect(bars[1].variant).toBe("warning");
     expect(textOf(tree)).toContain("Additional credits (never expire): 700 of 1700 left");
+  });
+
+  it("colors each bar by its own fill level, not the account state", () => {
+    // Jasper's case: pool 96% used with a FULL bank — the account is Healthy
+    // (success tag) but the pool bar must be danger and the bank bar success.
+    // Combined numbers: granted = pool 1000 + bank remaining 1000 = 2000,
+    // remaining = pool 40 + bank 1000 = 1040, used 960.
+    const tree = renderComponent(CreditMeter, {
+      entitlement: topupWithBank({
+        granted: 2000,
+        remaining: 1040,
+        used: 960,
+        top_up_bank_remaining: 1000,
+        top_up_bank_granted: 1000,
+      }),
+    });
+    const tag = findAll(tree, "StatusTag")[0];
+    expect(tag.children).toBe("Healthy");
+    expect(tag.variant).toBe("success");
+    const bars = findAll(tree, "ProgressBar");
+    expect(bars[0].variant).toBe("danger"); // pool: 960/1000 = 96% used
+    expect(bars[1].variant).toBe("success"); // bank: 1000/1000 = full
+  });
+
+  it("pins the bank gauge ladder at the component level (50% warning, 20% danger)", () => {
+    const bankVariant = (bankRemaining) => {
+      const tree = renderComponent(CreditMeter, {
+        entitlement: topupWithBank({
+          granted: 1000 + bankRemaining,
+          remaining: 1000 + bankRemaining,
+          used: 0,
+          top_up_bank_remaining: bankRemaining,
+          top_up_bank_granted: 1000,
+        }),
+      });
+      return findAll(tree, "ProgressBar")[1].variant;
+    };
+    expect(bankVariant(510)).toBe("success"); // >50% full
+    expect(bankVariant(500)).toBe("warning"); // 50% — top of the warning band
+    expect(bankVariant(210)).toBe("warning"); // 21% — still warning
+    expect(bankVariant(200)).toBe("danger"); // 20% — "running out"
+  });
+
+  it("pins the pool depletion ladder at the component level (80% warning, 95% danger)", () => {
+    // The no-bank legacy single bar follows the same ratio rule.
+    const singleVariant = (used) => {
+      const tree = renderComponent(CreditMeter, {
+        entitlement: legacyFree({ granted: 100, used, remaining: 100 - used }),
+      });
+      return findAll(tree, "ProgressBar")[0].variant;
+    };
+    expect(singleVariant(79)).toBe("success");
+    expect(singleVariant(80)).toBe("warning");
+    expect(singleVariant(94)).toBe("warning");
+    expect(singleVariant(95)).toBe("danger");
   });
 
   it("collapses to the single pool bar when the bank is spent (bankRemaining 0)", () => {

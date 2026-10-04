@@ -72,6 +72,7 @@ export {
   getAlerts,
   dismissAlert,
   getTopUps,
+  getInvoices,
   setBillingLimit,
   getSettings,
   updateSettings,

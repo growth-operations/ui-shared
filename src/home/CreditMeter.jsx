@@ -17,19 +17,22 @@ import { resolveCreditMeter } from "../lib/creditDisplay";
 // billing model) gets TWO bars, one per bucket, and NO combined headline (the
 // combined pool+bank denominator read as one big confusing allowance):
 //   1. Monthly plan credits — a DEPLETION meter (value = pool used of the
-//      period grant), color-coded by the account's depletion state: success
-//      when healthy, warning at/below the low threshold, danger when
-//      depleted (view.barVariant).
+//      period grant), colored by the POOL'S OWN fill level: success under
+//      80% used, warning at >=80%, danger at >=95% (view.poolBarVariant —
+//      mirrors the ~80/95 low-credit alert ladder).
 //   2. Additional credits — a LEVEL gauge (value = bank remaining of the
-//      bank's granted total), always success: the bank is cumulative and
-//      never expires, so a used-of-granted bar would drift to
-//      permanently-near-full over multiple purchases; the remaining level
-//      refills on purchase and drains on spend.
-// Hosts whose backend predates top_up_bank_granted degrade gracefully: the
-// bank renders as a text-only line (no bar, never "of 0"). An account with
-// NO bank credits left (never topped up, or the bank is spent) renders
-// exactly the legacy view — the "{remaining} of {granted} credits left"
-// headline plus the single color-coded bar.
+//      bank's granted total: the bank is cumulative and never expires, so a
+//      used-of-granted bar would drift to permanently-near-full over multiple
+//      purchases; the remaining level refills on purchase and drains on
+//      spend), colored by ITS OWN level: success above 50% full, warning at
+//      20–50%, danger at <=20% (view.bankBarVariant).
+// Each bar colors by its own fill, NOT the account's threshold state — the
+// StatusTag keeps the account-state colors. Hosts whose backend predates
+// top_up_bank_granted degrade gracefully: the bank renders as a text-only
+// line (no bar, never "of 0"). An account with NO bank credits left (never
+// topped up, or the bank is spent) renders exactly the legacy view — the
+// "{remaining} of {granted} credits left" headline plus the single
+// fill-colored bar.
 //
 // Props:
 //   entitlement  — the /v1/home entitlement union (uses the credits arm).
@@ -38,7 +41,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
   const view = resolveCreditMeter(entitlement, creditMeter);
   if (!view) return null;
 
-  const { granted, used, remaining, bank, tagVariant, tagLabel, barVariant, alert } = view;
+  const { granted, used, remaining, bank, tagVariant, tagLabel, poolBarVariant, bankBarVariant, alert } = view;
   const grantDaysLeft = view.grantExpiresAt ? daysUntil(view.grantExpiresAt) : null;
 
   return (
@@ -62,7 +65,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
                 value={bank.poolUsed}
                 maxValue={bank.poolGrant > 0 ? bank.poolGrant : 1}
                 showPercentage={true}
-                variant={barVariant}
+                variant={poolBarVariant}
               />
             </Flex>
             {bank.bankGranted > 0 ? (
@@ -78,7 +81,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
                   value={bank.bankRemaining}
                   maxValue={bank.bankGranted > 0 ? bank.bankGranted : 1}
                   showPercentage={true}
-                  variant="success"
+                  variant={bankBarVariant}
                 />
               </Flex>
             ) : (
@@ -104,7 +107,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
               value={used}
               maxValue={granted > 0 ? granted : 1}
               showPercentage={true}
-              variant={barVariant}
+              variant={poolBarVariant}
             />
           </>
         )}
