@@ -41,7 +41,15 @@ import { resolveBillingBanner } from "../lib/creditDisplay";
 //                 omit it to render the banner with no in-app button.
 //   context     — the UI-extension serverless context (optional; only used
 //                 for the portal link's return URL portal id).
-export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, context }) {
+//   currentPath — the host's current route path (optional). When the resolved
+//                 CTA is the in-app billing-navigation CTA (kind "billing")
+//                 and currentPath is "/billing", the button is suppressed —
+//                 it would just reload the page the user is already on. The
+//                 banner text still renders (it's informative on Billing too),
+//                 and the external portal CTA (kind "portal") is NOT
+//                 suppressed. Omitting the prop keeps the legacy behavior
+//                 (button always rendered), so non-updated hosts don't break.
+export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, context, currentPath }) {
   const banner = resolveBillingBanner(state?.entitlement, {
     actionLabel,
     actionsNoun,
@@ -70,6 +78,12 @@ export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, con
     }
   }
 
+  // Suppress the in-app billing-navigation CTA on the Billing page itself —
+  // there it would just reload the current route. Only the kind "billing"
+  // (in-app navigate) CTA is suppressed; the external portal CTA stays.
+  const suppressInAppCta =
+    currentPath === "/billing" && banner.cta && banner.cta.kind !== "portal";
+
   return (
     <Alert title={banner.title} variant={banner.variant}>
       <Flex direction="column" gap="extra-small">
@@ -81,7 +95,7 @@ export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, con
           >
             {banner.cta.label}
           </Button>
-        ) : banner.cta && onNavigate ? (
+        ) : !suppressInAppCta && banner.cta && onNavigate ? (
           <Button variant="secondary" onClick={() => onNavigate("/billing")}>
             {banner.cta.kind === "portal" ? "Go to Billing →" : banner.cta.label}
           </Button>
