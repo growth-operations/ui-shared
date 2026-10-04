@@ -70,9 +70,12 @@ export function hasTopUpBank(ent) {
 //   pool (DEPLETION meter, value = poolUsed of poolGrant):
 //     success when used < 80%, warning at >= 80%, danger at >= 95%.
 //   bank (LEVEL gauge, value = bankRemaining of bankGranted):
-//     success above 50% full, warning at 20–50%, danger at <= 20%
-//     ("running out") — a draining bank is warning-worthy even though it
-//     never expires.
+//     success above 50% full, warning at <= 50%. NO danger variant:
+//     HubSpot's ProgressBar paints the WHOLE TRACK red in danger (not just
+//     the filled portion), so a low level gauge would read as a full bar
+//     (caught in Jasper's 2026-10-04 screenshot review). Urgency at <= 20%
+//     rides the "Running low" tag (bank.bankLow) instead of the bar color.
+//     danger stays on the pool bar, where near-full is the truth.
 function poolBarVariantFor(poolUsed, poolGrant) {
   if (!(poolGrant > 0)) return "success"; // no grant: nothing to deplete
   if (poolUsed * 100 >= 95 * poolGrant) return "danger";
@@ -82,7 +85,6 @@ function poolBarVariantFor(poolUsed, poolGrant) {
 
 function bankBarVariantFor(bankRemaining, bankGranted) {
   if (!(bankGranted > 0)) return "success"; // degraded text-only line renders no bar
-  if (bankRemaining * 100 <= 20 * bankGranted) return "danger";
   if (bankRemaining * 100 <= 50 * bankGranted) return "warning";
   return "success";
 }
@@ -143,6 +145,10 @@ export function resolveCreditMeter(entitlement, creditMeter) {
       poolRemaining,
       poolUsed: poolGrant - poolRemaining,
     };
+    // "Running low" tag at <= 20% of the granted total (the bar itself caps
+    // at warning — see the header block). False when the total is unknown.
+    bank.bankLow =
+      bank.bankGranted > 0 && bankRemaining * 100 <= 20 * bank.bankGranted;
   }
 
   let tagVariant;

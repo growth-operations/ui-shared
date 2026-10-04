@@ -25,7 +25,10 @@ import { resolveCreditMeter } from "../lib/creditDisplay";
 //      used-of-granted bar would drift to permanently-near-full over multiple
 //      purchases; the remaining level refills on purchase and drains on
 //      spend), colored by ITS OWN level: success above 50% full, warning at
-//      20–50%, danger at <=20% (view.bankBarVariant).
+//      <=50% (view.bankBarVariant). NO danger on this bar — HubSpot's
+//      ProgressBar paints the whole track red in danger, so a low gauge
+//      would read as FULL; at <=20% a warning "Running low" StatusTag rides
+//      the line instead (bank.bankLow).
 // Each bar colors by its own fill, NOT the account's threshold state — the
 // StatusTag keeps the account-state colors. Hosts whose backend predates
 // top_up_bank_granted degrade gracefully: the bank renders as a text-only
@@ -72,10 +75,15 @@ export function CreditMeter({ entitlement, creditMeter }) {
               // Bank — level gauge over the granted total (refills on
               // purchase, drains on spend; never expires).
               <Flex direction="column" gap="extra-small">
-                <Text>
-                  Additional credits (never expire): {bank.bankRemaining} of{" "}
-                  {bank.bankGranted} left
-                </Text>
+                <Flex direction="row" gap="extra-small" align="center">
+                  <Text>
+                    Additional credits (never expire): {bank.bankRemaining} of{" "}
+                    {bank.bankGranted} left
+                  </Text>
+                  {bank.bankLow && (
+                    <StatusTag variant="warning">Running low</StatusTag>
+                  )}
+                </Flex>
                 <ProgressBar
                   title={`${bank.bankRemaining} of ${bank.bankGranted} left`}
                   value={bank.bankRemaining}
