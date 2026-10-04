@@ -8,6 +8,7 @@ import {
   Button,
   Alert,
   Input,
+  Link,
   LoadingSpinner,
   Table,
   TableHead,
@@ -22,7 +23,7 @@ import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { CreditMeter } from "../home/CreditMeter";
 import { PlanGrid } from "./PlanGrid";
 import { refreshBillingActionTokens } from "../sdk/billing";
-import { getTopUps, setBillingLimit } from "../sdk/app/topUps";
+import { getInvoices, getTopUps, setBillingLimit } from "../sdk/app/topUps";
 
 // Billing action tokens (see common.billing.action_token) are signed with a
 // 5-minute TTL — short enough that a customer who opens the tab and comes
@@ -477,6 +478,124 @@ function TopUpHistory({ context, appKey }) {
   );
 }
 
+// Invoice status -> label (Stripe's vocabulary: paid / open / void /
+// uncollectible; drafts and $0 voids are filtered server-side).
+const INVOICE_STATUS_LABELS = {
+  paid: "Paid",
+  open: "Open",
+  void: "Void",
+  uncollectible: "Uncollectible",
+};
+
+// The invoice-history table itself — pure rendering (exported for tests);
+// fetch/loading/error live in InvoiceHistory below.
+export function InvoiceHistoryTable({ invoices }) {
+  return (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableHeader>Date</TableHeader>
+          <TableHeader>Description</TableHeader>
+          <TableHeader>Amount</TableHeader>
+          <TableHeader>Status</TableHeader>
+          <TableHeader>Receipt</TableHeader>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {invoices.map((invoice, i) => (
+          <TableRow key={`${invoice.id ?? invoice.date}-${i}`}>
+            <TableCell>{fmtDate(invoice.date)}</TableCell>
+            <TableCell>{invoice.description}</TableCell>
+            <TableCell>{fmtMoney(invoice.amount_cents, invoice.currency)}</TableCell>
+            <TableCell>
+              {INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status ?? "—"}
+            </TableCell>
+            <TableCell>
+              {invoice.hosted_invoice_url ? (
+                <Link href={{ url: invoice.hosted_invoice_url, external: true }}>
+                  Receipt
+                </Link>
+              ) : (
+                "—"
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+// "Invoice history" — every Stripe invoice on the portal's customer
+// (subscription renewals, one-off charges, top-up bands — including VOIDED
+// top-ups, which tell the decline story), from the billing service's
+// GET /v1/billing/invoices (newest first, capped at 24). Loading, error, and
+// empty states mirror TopUpHistory.
+//
+// Auth is the billing action token (the claim scopes the response to THIS
+// portal's Stripe customer). BillingTab re-mints the token set every 3
+// minutes; depending on the token means the list also quietly refreshes on
+// that cadence while the tab stays open — a top-up that completes mid-session
+// shows up without a reload.
+//
+// Two "render nothing" degradations: no billing_base_url / token yet (an
+// older backend that doesn't mint them — same "hidden until token exists"
+// posture as the restart link), and a 404 from a billing service that
+// predates the invoices route (hide the section instead of erroring forever
+// until the service's next deploy).
+function InvoiceHistory({ billingBaseUrl, billingActionToken }) {
+  const [status, setStatus] = useState("loading"); // loading | ready | error | unsupported
+  const [invoices, setInvoices] = useState([]);
+
+  useStrictModeEffect(
+    async ({ mounted }) => {
+      try {
+        const res = await getInvoices({
+          billingBaseUrl,
+          token: billingActionToken,
+        });
+        if (mounted.current) {
+          setInvoices(res?.invoices ?? []);
+          setStatus("ready");
+        }
+      } catch (e) {
+        if (mounted.current) {
+          setStatus(e?.statusCode === 404 ? "unsupported" : "error");
+        }
+      }
+    },
+    [billingBaseUrl, billingActionToken]
+  );
+
+  if (!billingBaseUrl || !billingActionToken || status === "unsupported") {
+    return null;
+  }
+  if (status === "loading") {
+    return <LoadingSpinner showLabel label="Loading invoices…" />;
+  }
+  if (status === "error") {
+    return (
+      <Alert title="Couldn't load invoice history" variant="warning">
+        <Text>Refresh the page to try again.</Text>
+      </Alert>
+    );
+  }
+
+  return (
+    <Flex direction="column" gap="small">
+      <Heading>Invoice history</Heading>
+      {invoices.length === 0 ? (
+        <Text format={{ fontStyle: "italic" }}>
+          No invoices yet. Subscription renewals, one-off charges, and credit
+          top-ups are listed here.
+        </Text>
+      ) : (
+        <InvoiceHistoryTable invoices={invoices} />
+      )}
+    </Flex>
+  );
+}
+
 // "Billing limit" — the per-period spend cap on automatic top-ups. Shows the
 // current limit (when the entitlement arm carries billing_limit_cents), sets
 // a new one (USD input -> cents), or clears it, via the base service's
@@ -699,6 +818,14 @@ export function CreditsBilling({ context, state, appKey, openIframe = null }) {
         {state?.entitlement?.billing_model === "topup" && (
           <>
             <TopUpHistory context={context} appKey={appKey} />
+            {/* Directly below Top-up history (Andrew's ask). `state` here is
+                BillingTab's interval-refreshed copy, so the token is re-minted
+                every 3 minutes; InvoiceHistory hides itself when the backend
+                or billing service predates the pieces it needs. */}
+            <InvoiceHistory
+              billingBaseUrl={base}
+              billingActionToken={state?.billing_action_tokens?.portal ?? null}
+            />
             <BillingLimitControl
               context={context}
               appKey={appKey}

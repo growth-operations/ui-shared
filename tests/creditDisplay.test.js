@@ -308,30 +308,83 @@ describe("resolveCreditMeter", () => {
     expect(view.alert.title).toBe("Running low on credits");
   });
 
-  it("maps the bar variant from the depletion state", () => {
-    // ProgressBar takes success/warning/danger only; the pool/single bar
-    // follows the tag's depletion mapping with "info" collapsed to success.
-    expect(resolveCreditMeter(topupWithBank(), null).barVariant).toBe("success");
-    expect(
-      resolveCreditMeter(legacyFree({ remaining: 8, used: 92 }), null).barVariant
-    ).toBe("warning");
-    expect(
-      resolveCreditMeter(legacyFree({ remaining: 0, used: 100, depleted: true }), null)
-        .barVariant
-    ).toBe("danger");
-    expect(
-      resolveCreditMeter(topupWithBank({ threshold_state: "top_up_failed" }), null)
-        .barVariant
-    ).toBe("danger");
-    expect(
-      resolveCreditMeter(topupWithBank({ threshold_state: "limit_reached" }), null)
-        .barVariant
-    ).toBe("warning");
-    // top_up_pending's info tag has no ProgressBar counterpart -> success.
-    expect(
-      resolveCreditMeter(topupWithBank({ threshold_state: "top_up_pending" }), null)
-        .barVariant
-    ).toBe("success");
+  it("keeps the StatusTag on account state while bars color by fill level", () => {
+    // The motivating case (Jasper 2026-10): a pool at 96% used with a FULL
+    // bank must not render green just because the account is healthy. Pool
+    // 1000 with 960 used (40 left); bank 1000 untouched. Combined: granted
+    // 2000 (pool + bank remaining), remaining 1040, used 960.
+    const view = resolveCreditMeter(
+      topupWithBank({
+        granted: 2000,
+        remaining: 1040,
+        used: 960,
+        top_up_bank_remaining: 1000,
+        top_up_bank_granted: 1000,
+      }),
+      null
+    );
+    expect(view.tagVariant).toBe("success"); // account state — unchanged
+    expect(view.tagLabel).toBe("Healthy");
+    expect(view.poolBarVariant).toBe("danger"); // 96% of the pool is used
+    expect(view.bankBarVariant).toBe("success"); // the bank is full
+  });
+
+  it("colors the pool bar by its own depletion ratio (80/95 ladder)", () => {
+    // Boundaries: <80% success, >=80% warning, >=95% danger — integer
+    // cross-multiplication, so 80/100 and 95/100 land exactly on the rungs.
+    const single = (used) =>
+      resolveCreditMeter(
+        legacyFree({ granted: 100, used, remaining: 100 - used }),
+        null
+      ).poolBarVariant;
+    expect(single(79)).toBe("success");
+    expect(single(80)).toBe("warning");
+    expect(single(94)).toBe("warning");
+    expect(single(95)).toBe("danger");
+  });
+
+  it("colors the bank bar by its own remaining level (50/20 ladder)", () => {
+    // Boundaries: >50% full success, 20–50% warning, <=20% danger. Bank
+    // granted 1000; pool 1000 untouched (granted = 1000 + bankRemaining).
+    const bankVariant = (bankRemaining) =>
+      resolveCreditMeter(
+        topupWithBank({
+          granted: 1000 + bankRemaining,
+          remaining: 1000 + bankRemaining,
+          used: 0,
+          top_up_bank_remaining: bankRemaining,
+          top_up_bank_granted: 1000,
+        }),
+        null
+      ).bankBarVariant;
+    expect(bankVariant(510)).toBe("success");
+    expect(bankVariant(500)).toBe("warning");
+    expect(bankVariant(210)).toBe("warning");
+    expect(bankVariant(200)).toBe("danger");
+  });
+
+  it("depleted account: the tag says Depleted AND the empty pool bar is danger", () => {
+    const view = resolveCreditMeter(
+      legacyFree({ remaining: 0, used: 100, depleted: true }),
+      null
+    );
+    expect(view.tagVariant).toBe("danger");
+    expect(view.tagLabel).toBe("Depleted");
+    expect(view.poolBarVariant).toBe("danger"); // 100% used — same color, from the ratio
+  });
+
+  it("exposes no bankBarVariant when there is no bank section", () => {
+    const view = resolveCreditMeter(legacyFree(), null);
+    expect(view.bank).toBe(null);
+    expect(view.bankBarVariant).toBe(null);
+  });
+
+  it("a zero grant never divides oddly — the pool bar reads success", () => {
+    const view = resolveCreditMeter(
+      legacyFree({ granted: 0, used: 0, remaining: 0 }),
+      null
+    );
+    expect(view.poolBarVariant).toBe("success");
   });
 });
 

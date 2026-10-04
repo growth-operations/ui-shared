@@ -12,6 +12,7 @@ import * as root from "../src/index.js";
 describe("package exports", () => {
   it("exposes the top-up SDK helpers and pure credit display logic", () => {
     expect(typeof root.getTopUps).toBe("function");
+    expect(typeof root.getInvoices).toBe("function");
     expect(typeof root.setBillingLimit).toBe("function");
     expect(typeof root.resolveCreditMeter).toBe("function");
     expect(typeof root.resolveBillingBanner).toBe("function");
