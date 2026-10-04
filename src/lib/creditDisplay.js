@@ -26,9 +26,10 @@
 //   incident where a paying, overage account was shown a blocking
 //   "Depleted"/"out of credits" panel).
 
-// True when the account has (or ever had) a top-up bank: the two-segment
-// meter renders only then — a zero bank with NO top-up ever (last_top_up_at
-// null) renders exactly the legacy single-segment bar.
+// True when the account has (or ever had) a top-up bank. Note the CreditMeter
+// bank section renders only while the bank HAS credits left (bankRemaining >
+// 0 — see resolveCreditMeter); this predicate stays the looser "ever had one"
+// for consumers that render history/summary surfaces.
 export function hasTopUpBank(ent) {
   if (!ent) return false;
   return (ent.top_up_bank_remaining ?? 0) > 0 || ent.last_top_up_at != null;
@@ -38,12 +39,25 @@ export function hasTopUpBank(ent) {
 // Returns null when there is no credit data to show (component renders
 // nothing). Otherwise:
 //   granted/used/remaining — combined (topup) or raw (legacy) display numbers
-//   bank                 — { bankRemaining, poolGrant, poolRemaining, poolUsed }
-//                          when the account has a bank, else null
+//   bank                 — { bankRemaining, bankGranted, poolGrant,
+//                          poolRemaining, poolUsed } when the account has bank
+//                          credits LEFT (bankRemaining > 0), else null — a
+//                          zero bank renders the plain single-pool bar (with
+//                          bankRemaining 0 the combined numbers ARE the pool
+//                          numbers). bankGranted is the bank's lifetime
+//                          granted total (the bank bar's denominator); 0 on
+//                          backends that predate top_up_bank_granted — the
+//                          component degrades to a text-only bank line.
 //   thresholdState       — the arm's threshold_state, or null on a backend
 //                          that predates it
 //   depleted/overIncluded/low — mutually-exclusive urgency flags
 //   tagVariant/tagLabel  — StatusTag rendering
+//   barVariant           — ProgressBar sentiment for the pool/single bar:
+//                          the tag's depletion mapping minus "info"
+//                          (ProgressBar only takes success/warning/danger;
+//                          top_up_pending is calm/positive, so success).
+//                          The bank bar is always "success" (a never-expiring
+//                          balance has no negative direction).
 //   alert                — { variant, title, message } or null
 //   grantExpiresAt       — pass-through for the free-grant countdown
 export function resolveCreditMeter(entitlement, creditMeter) {
@@ -82,13 +96,23 @@ export function resolveCreditMeter(entitlement, creditMeter) {
   // Bank split. Drawdown is monthly-first, so of the combined `remaining` the
   // bank portion is bankRemaining and the rest is pool remaining; the pool
   // segment's full size is the combined denominator minus the bank.
+  //
+  // The bank section renders ONLY while the bank has credits left
+  // (bankRemaining > 0): a zero bank — never topped up, or fully burned —
+  // renders the plain single-pool bar, and with bankRemaining 0 the combined
+  // numbers ARE the pool numbers (granted == poolGrant, remaining ==
+  // poolRemaining), so nothing is lost.
   let bank = null;
-  if (hasTopUpBank(ent)) {
-    const bankRemaining = Math.max(0, ent?.top_up_bank_remaining ?? 0);
+  const bankRemaining = Math.max(0, ent?.top_up_bank_remaining ?? 0);
+  if (bankRemaining > 0) {
     const poolGrant = Math.max(granted - bankRemaining, 0);
     const poolRemaining = Math.min(Math.max(remaining - bankRemaining, 0), poolGrant);
     bank = {
       bankRemaining,
+      // The bank's lifetime granted total — the bank bar's denominator. 0 on
+      // backends that predate top_up_bank_granted (the component degrades to
+      // a text-only bank line; never divide by zero, never "of 0").
+      bankGranted: Math.max(0, ent?.top_up_bank_granted ?? 0),
       poolGrant,
       poolRemaining,
       poolUsed: poolGrant - poolRemaining,
@@ -119,6 +143,13 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     tagVariant = "success";
     tagLabel = "Healthy";
   }
+
+  // ProgressBar sentiment for the pool bar (and the no-bank single bar):
+  // color-coded by depletion — success when healthy, warning at/below the
+  // low threshold (and for the other warning-level states), danger when
+  // depleted/top-up-failed. ProgressBar has no "info" variant, so the calm
+  // top_up_pending state renders success.
+  const barVariant = tagVariant === "info" ? "success" : tagVariant;
 
   // The inline meter alert mirrors the banner's messaging at the point of
   // glance. Legacy branches keep their pre-top-up copy byte-for-byte.
@@ -171,6 +202,7 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     low,
     tagVariant,
     tagLabel,
+    barVariant,
     alert,
     grantExpiresAt: ent?.grant_expires_at ?? null,
   };

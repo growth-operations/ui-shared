@@ -33,6 +33,7 @@ const meteredPaid = (over = {}) => ({
   over_included: false,
   plan: "starter",
   top_up_bank_remaining: 0,
+  top_up_bank_granted: 0,
   last_top_up_at: null,
   threshold_state: "healthy",
   ...over,
@@ -51,6 +52,7 @@ const topupWithBank = (over = {}) => ({
   over_included: false,
   plan: "starter",
   top_up_bank_remaining: 700,
+  top_up_bank_granted: 1000,
   last_top_up_at: "2026-09-20T14:03:00Z",
   threshold_state: "healthy",
   ...over,
@@ -122,6 +124,7 @@ describe("resolveCreditMeter", () => {
     expect(view.granted).toBe(1700);
     expect(view.bank).toEqual({
       bankRemaining: 700,
+      bankGranted: 1000,
       poolGrant: 1000,
       poolRemaining: 1000,
       poolUsed: 0,
@@ -142,6 +145,7 @@ describe("resolveCreditMeter", () => {
     );
     expect(view.bank).toEqual({
       bankRemaining: 500,
+      bankGranted: 1000,
       poolGrant: 1000,
       poolRemaining: 0,
       poolUsed: 1000,
@@ -160,10 +164,37 @@ describe("resolveCreditMeter", () => {
     );
     expect(view.bank).toEqual({
       bankRemaining: 1000,
+      bankGranted: 1000,
       poolGrant: 1000,
       poolRemaining: 600,
       poolUsed: 400,
     });
+  });
+
+  it("exposes no bank view when the bank has no credits left", () => {
+    // Bank fully burned (a top-up WAS granted before, last_top_up_at set):
+    // bankRemaining 0 renders the plain single-pool branch — the combined
+    // numbers ARE the pool numbers, so nothing is lost.
+    const view = resolveCreditMeter(
+      topupWithBank({
+        granted: 1000, // pool only; bank spent
+        remaining: 400,
+        used: 600,
+        top_up_bank_remaining: 0,
+      }),
+      null
+    );
+    expect(view.bank).toBe(null);
+  });
+
+  it("defaults bankGranted to 0 when the backend predates the field", () => {
+    // Graceful-degradation input: bank credits remain but the granted total
+    // is unknown — the component renders the text-only bank line (no bar).
+    const ent = topupWithBank();
+    delete ent.top_up_bank_granted;
+    const view = resolveCreditMeter(ent, null);
+    expect(view.bank.bankRemaining).toBe(700);
+    expect(view.bank.bankGranted).toBe(0);
   });
 
   it("never blocks a metered paid account in overage (2026-09-02 regression)", () => {
@@ -223,8 +254,9 @@ describe("resolveCreditMeter", () => {
       message:
         "Actions are paused until your next billing period or a successful top-up.",
     });
-    // Bank is spent but existed — the two-segment breakdown still renders.
-    expect(view.bank).not.toBe(null);
+    // Bank is spent — with bankRemaining 0 there is no bank section; the
+    // plain single-pool branch renders (combined numbers == pool numbers).
+    expect(view.bank).toBe(null);
   });
 
   it("still treats over_included as not-blocked even if threshold_state says depleted", () => {
@@ -274,6 +306,32 @@ describe("resolveCreditMeter", () => {
     expect(view.low).toBe(true);
     expect(view.tagLabel).toBe("Running low");
     expect(view.alert.title).toBe("Running low on credits");
+  });
+
+  it("maps the bar variant from the depletion state", () => {
+    // ProgressBar takes success/warning/danger only; the pool/single bar
+    // follows the tag's depletion mapping with "info" collapsed to success.
+    expect(resolveCreditMeter(topupWithBank(), null).barVariant).toBe("success");
+    expect(
+      resolveCreditMeter(legacyFree({ remaining: 8, used: 92 }), null).barVariant
+    ).toBe("warning");
+    expect(
+      resolveCreditMeter(legacyFree({ remaining: 0, used: 100, depleted: true }), null)
+        .barVariant
+    ).toBe("danger");
+    expect(
+      resolveCreditMeter(topupWithBank({ threshold_state: "top_up_failed" }), null)
+        .barVariant
+    ).toBe("danger");
+    expect(
+      resolveCreditMeter(topupWithBank({ threshold_state: "limit_reached" }), null)
+        .barVariant
+    ).toBe("warning");
+    // top_up_pending's info tag has no ProgressBar counterpart -> success.
+    expect(
+      resolveCreditMeter(topupWithBank({ threshold_state: "top_up_pending" }), null)
+        .barVariant
+    ).toBe("success");
   });
 });
 

@@ -9,16 +9,27 @@ import { resolveCreditMeter } from "../lib/creditDisplay";
 // `credit_meter` block (CONTRACT.md). Renders nothing when there is no credit
 // data to show.
 //
-// All branch math (number precedence, threshold_state → tag/alert, the
-// pool+bank split) lives in ../lib/creditDisplay so it's unit-testable — this
-// component is pure rendering.
+// All branch math (number precedence, threshold_state → tag/alert/bar
+// variants, the pool+bank split) lives in ../lib/creditDisplay so it's
+// unit-testable — this component is pure rendering.
 //
-// Two-segment bank display: accounts with a top-up bank (topup billing model)
-// get the combined marker bar — `${used} of ${granted}` over the combined
-// pool+bank denominator, so after a period reset with bank left it reads e.g.
-// "0 of 1,700" while the bank segment shows what's left — plus the
-// pool/bank breakdown lines. Accounts with NO bank (top_up_bank_remaining 0
-// AND never a top-up) render exactly the legacy single-segment bar.
+// Stacked-bars bank display: an account with top-up bank credits left (topup
+// billing model) gets TWO bars, one per bucket, and NO combined headline (the
+// combined pool+bank denominator read as one big confusing allowance):
+//   1. Monthly plan credits — a DEPLETION meter (value = pool used of the
+//      period grant), color-coded by the account's depletion state: success
+//      when healthy, warning at/below the low threshold, danger when
+//      depleted (view.barVariant).
+//   2. Additional credits — a LEVEL gauge (value = bank remaining of the
+//      bank's granted total), always success: the bank is cumulative and
+//      never expires, so a used-of-granted bar would drift to
+//      permanently-near-full over multiple purchases; the remaining level
+//      refills on purchase and drains on spend.
+// Hosts whose backend predates top_up_bank_granted degrade gracefully: the
+// bank renders as a text-only line (no bar, never "of 0"). An account with
+// NO bank credits left (never topped up, or the bank is spent) renders
+// exactly the legacy view — the "{remaining} of {granted} credits left"
+// headline plus the single color-coded bar.
 //
 // Props:
 //   entitlement  — the /v1/home entitlement union (uses the credits arm).
@@ -27,7 +38,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
   const view = resolveCreditMeter(entitlement, creditMeter);
   if (!view) return null;
 
-  const { granted, used, remaining, bank, tagVariant, tagLabel, alert } = view;
+  const { granted, used, remaining, bank, tagVariant, tagLabel, barVariant, alert } = view;
   const grantDaysLeft = view.grantExpiresAt ? daysUntil(view.grantExpiresAt) : null;
 
   return (
@@ -38,42 +49,64 @@ export function CreditMeter({ entitlement, creditMeter }) {
           <StatusTag variant={tagVariant}>{tagLabel}</StatusTag>
         </Flex>
 
-        {/* PRIMARY signal — large and obvious. */}
-        <Text format={{ fontWeight: "bold", fontSize: "lg" }}>
-          {remaining} of {granted} credits left
-        </Text>
-
         {bank ? (
           <>
-            {/* Current-position marker over the COMBINED pool+bank
-                denominator (used = granted - remaining). The HubSpot
-                ProgressBar is single-value, so the two segments are the
-                labeled breakdown below; this bar is the position within the
-                whole. */}
-            <ProgressBar
-              title={`${used} of ${granted} used`}
-              value={used}
-              maxValue={granted > 0 ? granted : 1}
-              showPercentage={true}
-            />
+            {/* Pool — depletion meter over the period grant. */}
             <Flex direction="column" gap="extra-small">
               <Text>
                 Monthly plan credits: {bank.poolRemaining} of {bank.poolGrant}{" "}
                 left
               </Text>
-              <Text>Additional credits: {bank.bankRemaining} left</Text>
-              <Text format={{ fontStyle: "italic" }}>
-                Additional credits don't expire.
-              </Text>
+              <ProgressBar
+                title={`${bank.poolUsed} of ${bank.poolGrant} used`}
+                value={bank.poolUsed}
+                maxValue={bank.poolGrant > 0 ? bank.poolGrant : 1}
+                showPercentage={true}
+                variant={barVariant}
+              />
             </Flex>
+            {bank.bankGranted > 0 ? (
+              // Bank — level gauge over the granted total (refills on
+              // purchase, drains on spend; never expires).
+              <Flex direction="column" gap="extra-small">
+                <Text>
+                  Additional credits (never expire): {bank.bankRemaining} of{" "}
+                  {bank.bankGranted} left
+                </Text>
+                <ProgressBar
+                  title={`${bank.bankRemaining} of ${bank.bankGranted} left`}
+                  value={bank.bankRemaining}
+                  maxValue={bank.bankGranted > 0 ? bank.bankGranted : 1}
+                  showPercentage={true}
+                  variant="success"
+                />
+              </Flex>
+            ) : (
+              // Graceful degradation: the host's backend predates
+              // top_up_bank_granted, so the bank total is unknown — text
+              // only, no bar (never divide by zero, never "of 0").
+              <Flex direction="column" gap="extra-small">
+                <Text>Additional credits: {bank.bankRemaining} left</Text>
+                <Text format={{ fontStyle: "italic" }}>
+                  Additional credits don't expire.
+                </Text>
+              </Flex>
+            )}
           </>
         ) : (
-          <ProgressBar
-            title={`${used} used`}
-            value={used}
-            maxValue={granted > 0 ? granted : 1}
-            showPercentage={true}
-          />
+          <>
+            {/* PRIMARY signal — large and obvious. */}
+            <Text format={{ fontWeight: "bold", fontSize: "lg" }}>
+              {remaining} of {granted} credits left
+            </Text>
+            <ProgressBar
+              title={`${used} used`}
+              value={used}
+              maxValue={granted > 0 ? granted : 1}
+              showPercentage={true}
+              variant={barVariant}
+            />
+          </>
         )}
 
         {/* Free-grant countdown: "100 free credits — N days left". */}

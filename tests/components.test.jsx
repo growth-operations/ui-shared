@@ -59,18 +59,60 @@ describe("CreditMeter", () => {
     expect(tag.variant).toBe("success");
   });
 
-  it("renders the two-segment bank view: marker '0 of 1,700 used' post-reset", () => {
+  it("renders stacked bars post-reset: pool depletion meter + text-only bank when granted is unknown", () => {
     const tree = renderComponent(CreditMeter, { entitlement: topupWithBank() });
     const bars = findAll(tree, "ProgressBar");
-    expect(bars).toHaveLength(1); // HubSpot ProgressBar is single-value
-    expect(bars[0].title).toBe("0 of 1700 used");
+    // No top_up_bank_granted in the fixture → the bank degrades to a
+    // text-only line (no bar, never "of 0").
+    expect(bars).toHaveLength(1);
+    expect(bars[0].title).toBe("0 of 1000 used");
     expect(bars[0].value).toBe(0);
-    expect(bars[0].maxValue).toBe(1700);
+    expect(bars[0].maxValue).toBe(1000);
+    expect(bars[0].variant).toBe("success");
     const text = textOf(tree);
-    expect(text).toContain("1700 of 1700 credits left");
+    // No combined headline — the combined denominator read as one big
+    // confusing allowance.
+    expect(text).not.toContain("1700 of 1700 credits left");
     expect(text).toContain("Monthly plan credits: 1000 of 1000 left");
     expect(text).toContain("Additional credits: 700 left");
     expect(text).toContain("Additional credits don't expire.");
+  });
+
+  it("renders the bank bar as a remaining-level gauge when top_up_bank_granted is present", () => {
+    const tree = renderComponent(CreditMeter, {
+      entitlement: topupWithBank({ top_up_bank_granted: 1700 }),
+    });
+    const bars = findAll(tree, "ProgressBar");
+    expect(bars).toHaveLength(2);
+    // Pool — depletion meter over the period grant.
+    expect(bars[0].title).toBe("0 of 1000 used");
+    expect(bars[0].maxValue).toBe(1000);
+    // Bank — level gauge: value is REMAINING (refills on purchase), always
+    // green (a never-expiring balance has no negative direction).
+    expect(bars[1].title).toBe("700 of 1700 left");
+    expect(bars[1].value).toBe(700);
+    expect(bars[1].maxValue).toBe(1700);
+    expect(bars[1].variant).toBe("success");
+    expect(textOf(tree)).toContain("Additional credits (never expire): 700 of 1700 left");
+  });
+
+  it("collapses to the single pool bar when the bank is spent (bankRemaining 0)", () => {
+    const tree = renderComponent(CreditMeter, {
+      entitlement: topupWithBank({
+        granted: 1000,
+        used: 300,
+        remaining: 700,
+        top_up_bank_remaining: 0,
+        top_up_bank_granted: 1000,
+      }),
+    });
+    const bars = findAll(tree, "ProgressBar");
+    expect(bars).toHaveLength(1);
+    expect(bars[0].title).toBe("300 used");
+    expect(bars[0].maxValue).toBe(1000);
+    const text = textOf(tree);
+    expect(text).toContain("700 of 1000 credits left");
+    expect(text).not.toContain("Additional credits");
   });
 
   it("shows the blocking depleted state for a topup paid account at true zero", () => {
