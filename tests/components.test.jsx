@@ -234,6 +234,70 @@ describe("BillingBanner", () => {
     expect(findAll(tree, "Button")[0].children).toBe("Go to Billing →");
   });
 
+  it("suppresses the in-app billing CTA when currentPath is /billing", () => {
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(topupWithBank({ threshold_state: "limit_reached" })),
+      onNavigate: () => {},
+      currentPath: "/billing",
+    });
+    const alert = findAll(tree, "Alert")[0];
+    // Banner text stays — it's still informative on the Billing page.
+    expect(alert.title).toBe("Billing limit reached");
+    expect(findAll(tree, "Button")).toHaveLength(0);
+  });
+
+  it("keeps the in-app billing CTA on other paths", () => {
+    const onNavigate = vi.fn();
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(topupWithBank({ threshold_state: "limit_reached" })),
+      onNavigate,
+      currentPath: "/home",
+    });
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].children).toBe("Raise your billing limit");
+    buttons[0].onClick();
+    expect(onNavigate).toHaveBeenCalledWith("/billing");
+  });
+
+  it("does NOT suppress the external portal CTA on /billing", () => {
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(topupWithBank({ threshold_state: "top_up_failed" })),
+      context,
+      onNavigate: () => {},
+      currentPath: "/billing",
+    });
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].children).toBe("Update payment method");
+    expect(buttons[0].href.external).toBe(true);
+    expect(buttons[0].href.url).toContain("/v1/billing/portal/start");
+  });
+
+  it("omitted currentPath -> legacy behavior (button always rendered)", () => {
+    const onNavigate = vi.fn();
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(topupWithBank({ threshold_state: "limit_reached" })),
+      onNavigate,
+    });
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    buttons[0].onClick();
+    expect(onNavigate).toHaveBeenCalledWith("/billing");
+  });
+
+  it("suppresses the legacy 'Go to Billing →' CTA on /billing", () => {
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(legacyFree({ remaining: 0, used: 100, depleted: true })),
+      actionLabel: "attaching and updating files",
+      onNavigate: () => {},
+      currentPath: "/billing",
+    });
+    const alert = findAll(tree, "Alert")[0];
+    expect(alert.title).toBe("You're out of credits");
+    expect(findAll(tree, "Button")).toHaveLength(0);
+  });
+
   it("legacy paid overage -> unchanged calm warning, never blocking", () => {
     const tree = renderComponent(BillingBanner, {
       state: stateFor(
