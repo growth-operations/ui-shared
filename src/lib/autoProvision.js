@@ -34,7 +34,7 @@ export function resolveAutoProvision(autoProvision) {
 //   idle       — nothing happening
 //   confirming — the user flipped ON→OFF; the confirmation panel is up and
 //                the toggle stays checked until they decide
-//   saving     — a POST /v1/billing/auto-provision is in flight
+//   saving     — the auto-provision POST is in flight
 export const AUTO_PROVISION_IDLE = {
   phase: "idle",
   notice: null, // null | { variant: "success"|"error", text }
