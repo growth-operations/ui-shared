@@ -27,6 +27,7 @@ import {
 } from "@hubspot/ui-extensions";
 
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
+import { CreditMeter } from "../home/CreditMeter";
 
 const DEFAULT_BASE_PATH = "/api/v1/usage";
 
@@ -34,25 +35,39 @@ const WINDOW_OPTIONS = [
   { label: "Last 7 days", value: "7" },
   { label: "Last 30 days", value: "30" },
   { label: "Last 90 days", value: "90" },
+  { label: "Last 180 days", value: "180" },
+  { label: "Last 365 days", value: "365" },
 ];
 
 // context: extension context. basePath/portalId: target the right backend
-// (base-hosted apps pass both). appName: chart copy.
+// (base-hosted apps pass both). appName: chart copy. state: the /v1/home
+// payload (optional) — when present, the credit meter renders at the TOP of
+// the tab (Andrew's 2026-10 feedback: the meter moved off Home); without it
+// the tab is chart-only, same as before.
 export function UsageTab({
   context,
   basePath = DEFAULT_BASE_PATH,
   portalId,
   appName = "this app",
+  state = null,
 }) {
   const [days, setDays] = useState("30");
 
   return (
     <Flex direction="column" gap="medium">
+      {state && (
+        <CreditMeter
+          entitlement={state.entitlement}
+          creditMeter={state.credit_meter}
+          credits={state.credits}
+        />
+      )}
+
       <Flex direction="row" justify="between" align="end">
         <Heading>Usage</Heading>
         <Select
-          label="Window"
-          name="window"
+          label="Time period"
+          name="time-period"
           options={WINDOW_OPTIONS}
           value={days}
           onChange={setDays}
@@ -131,7 +146,7 @@ function UsageContent({ context, basePath, portalId, appName, days }) {
     <Flex direction="column" gap="medium">
       <Tile>
         <Statistics>
-          <StatisticsItem label="Used (window)" number={usedInWindow} />
+          <StatisticsItem label={`Used (last ${days} days)`} number={usedInWindow} />
           {hasBalance && <StatisticsItem label="Remaining" number={remaining} />}
           {hasBalance && <StatisticsItem label="Granted" number={granted} />}
         </Statistics>
