@@ -8,8 +8,9 @@ vi.mock("@hubspot/ui-extensions", async () => {
 });
 
 import { FeatureUsage } from "../src/home/FeatureUsage";
+import { AppHome } from "../src/home/AppHome";
 import { resolveFeatureUsage, featureUsageOf } from "../src/lib/featureUsage";
-import { renderComponent, findAll, textOf } from "./helpers/render";
+import { renderComponent, shallowResolve, findAll, textOf } from "./helpers/render";
 
 const block = (over = {}) => ({
   most_used: [
@@ -162,5 +163,46 @@ describe("FeatureUsage", () => {
     });
     expect(findAll(tree, "Link")).toHaveLength(0);
     expect(textOf(tree)).toContain("K");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AppHome integration — the cockpit gate (post-checklist only). AppHome's
+// InstallProgress child uses hooks, so these go through shallowResolve and
+// assert on the FeatureUsage node itself rather than its rendered text.
+// ---------------------------------------------------------------------------
+
+// Minimal activated-cockpit payload; the block lives at payload.state.feature_usage.
+const cockpit = (over = {}) => ({
+  app: { name: "Geocoding & Geofencing", app_key: "hubspot_geocoding" },
+  activation: { status: "completed", complete: true, step: 5, total: 5, warnings: [] },
+  health: { level: "healthy", reasons: [] },
+  onboarding: { complete: true, steps: [] },
+  nudges: [],
+  ...over,
+});
+
+describe("AppHome + FeatureUsage", () => {
+  it("mounts FeatureUsage once onboarding is complete, fed the whole payload", () => {
+    const payload = cockpit({ state: { feature_usage: block() } });
+    const tree = shallowResolve(AppHome({ state: payload }));
+    const nodes = findAll(tree, "FeatureUsage");
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].state).toBe(payload);
+  });
+
+  it("stays hidden while the checklist is unfinished, even with the block", () => {
+    const tree = shallowResolve(
+      AppHome({
+        state: cockpit({
+          onboarding: {
+            complete: false,
+            steps: [{ key: "plan", label: "Choose a plan", done: false }],
+          },
+          state: { feature_usage: block() },
+        }),
+      })
+    );
+    expect(findAll(tree, "FeatureUsage")).toHaveLength(0);
   });
 });

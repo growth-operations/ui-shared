@@ -9,7 +9,7 @@
 // one of those resolves to null (render nothing), never an empty box.
 
 // Resolve the feature_usage block into render-ready shape:
-//   { mostUsed: [{ key, name, creditsLabel }],
+//   { mostUsed: [{ key, name, credits }],
 //     notInUse: [{ key, name, docsUrl, rationale }] }
 // Returns null when the block is absent/malformed or BOTH lists are empty
 // (an install using every detectable feature has nothing to show here).
