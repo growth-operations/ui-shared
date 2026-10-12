@@ -49,12 +49,11 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // (metered paid overage) always means "paying overage, not blocked".
     "threshold_state": "healthy",
     // "metered" | "topup" — the billing model in force. Drives which Billing
-    // tab sections render (top-up history + billing limit show only for
-    // "topup"). Absent on backends that predate the top-up contract.
-    "billing_model": "metered",
-    // The per-period auto top-up spend cap, in cents (null/absent = uncapped).
-    // Populated for ALL accounts; drives the Billing tab's limit control.
-    "billing_limit_cents": null
+    // tab sections render (pack purchase history + auto-provision show only
+    // for "topup"). Absent on backends that predate the top-up contract.
+    "billing_model": "metered"
+    // billing_limit_cents was REMOVED (App Home/Billing refresh): the
+    // per-period spend cap is superseded by state.auto_provision below.
   },
 
   // INSTALL/ACTIVATION PROGRESS — common (today in /v1/state). Drives InstallProgress.
@@ -68,6 +67,49 @@ contract serves all archetypes; components branch on `entitlement.mode`.
 
   // HEALTH HERO — common, server-computed verdict. Drives HealthHero (activated state).
   "health": { "level": "healthy", "reasons": [] },  // healthy | attention | critical
+
+  // STATE (App Home/Billing refresh; credit apps served by growth-ops-apps-base).
+  // ADDITIVE: absent on older backends — degrade gracefully (render the
+  // pre-refresh UI) when "state" is missing. health v2 is mirrored into the
+  // top-level "health" block too, so HealthHero gets "attention" either way.
+  "state": {
+    "credits": {
+      "monthly":    { "remaining": 900, "included": 1000,
+                      "renews_on": "2026-10-12" },  // subscription current_period_end (YYYY-MM-DD), null when unknown
+      "additional": { "remaining": 1500, "purchased": 2000,
+                      "expires": false }            // additional credits (formerly "top-up bank") never expire
+    },
+    // Replaces the old billing-limit concept. enabled = buy another pack
+    // automatically when monthly credits run out; disabled = no purchase,
+    // actions fail the entitlement gate at zero. Default true. A legacy
+    // disabled/zero billing limit maps to enabled=false on first read.
+    "auto_provision": { "enabled": true },
+    // Last CLOSED billing period vs current period-to-date, off the credit
+    // ledger. null until the install has one full closed period.
+    "period_comparison": {
+      "last_period":    { "label": "Sep 12 – Oct 11", "total_credits": 410,
+                          "by_action": [{ "action": "geo.lookup", "credits": 410 }] },
+      "current_period": { "label": "Oct 12 – present", "total_credits": 96,
+                          "by_action": [{ "action": "geo.lookup", "credits": 96 }] }
+    },
+    // Computed AT READ TIME (no cron). upgrade_recommended when the install
+    // bought >= 3 additional-credit packs this period OR last period's total
+    // consumption would have been cheaper on the next tier (by tier_order);
+    // monthly_savings_usd comes from the catalog's monthly price legs and is
+    // null when not computable (e.g. a talk-to-sales target tier).
+    "plan_fit": {
+      "verdict": "right_plan",        // right_plan | upgrade_recommended
+      "target_tier": null,            // e.g. "professional"
+      "monthly_savings_usd": null,
+      "topup_packs_this_period": 0
+    },
+    // Health v2: "attention" (new — was only ever healthy/critical) when
+    // unresolved error-level alerts spike (>2 in the trailing week) OR
+    // plan_fit recommends an upgrade; reasons[] carries the human text
+    // ("3 error alerts this week", "You could save $40/mo on Professional").
+    // "critical" stays reserved for subscription-ended/uninstalled.
+    "health": { "level": "healthy", "reasons": [] }
+  },
 
   // ONBOARDING — common shape, archetype-specific steps. Drives OnboardingChecklist.
   "onboarding": {
@@ -172,23 +214,32 @@ browser extensions key off the 402 `code`. The gate is deliberately NARROWER tha
 are NOT 402'd. Both layers fail open on infrastructure errors (a Firestore/network
 blip must not hard-down paying customers).
 
-## Top-up billing endpoints (base service)
+## Billing endpoints (base service)
 
-For credit apps on the top-up ("bank") model, the base service exposes two
-app-pages billing routes (verify_hubspot — the platform injects
+For credit apps on the topup ("additional credits") model, the base service
+exposes app-pages billing routes (verify_hubspot — the platform injects
 Authorization; `portalId` rides as a query param like the other base-hosted
-app_pages routes). ui-shared's `getTopUps` / `setBillingLimit`
-(src/sdk/app/topUps.js) call them via `callAppApi`:
+app_pages routes). The mutating routes carry a SECOND auth dep beyond
+verify_hubspot: a required `token` query param with a billing action token
+(common.billing.action_token; any action in the portal/checkout/upgrade/restart
+vocabulary verifies) — the same proof of recent in-app billing-surface access
+the /v1/billing/*/start endpoints require. ui-shared passes the
+(interval-refreshed) `billing_action_tokens.portal`.
 
-- `GET /v1/hubspot/app_pages/{app}/billing/top-ups` →
-  `{ "top_ups": [{ "at", "credits", "price_cents", "period_key" }] }`
-  (newest first). Drives BillingTab's "Top-up history" section.
+- `POST /v1/hubspot/app_pages/{app}/billing/auto-provision` with
+  `{ "enabled": bool }` → `{ "status": "success", "auto_provision": { "enabled": bool } }`.
+  Sets the portal's auto-provision toggle (state.auto_provision above;
+  REPLACES the per-period spend cap). The GOAA top-up consumer consults the
+  flag before charging: enabled = buy another pack when monthly credits run
+  out; disabled = no purchase, actions fail the entitlement gate at zero.
 - `POST /v1/hubspot/app_pages/{app}/billing/limit` with
-  `{ "limit_cents": int | null }` — set/clear the per-period auto top-up
-  spend cap. Drives BillingTab's "Billing limit" control. This route has a
-  SECOND auth dep beyond verify_hubspot: a required `token` query param
-  carrying a billing action token (common.billing.action_token; any action in
-  the portal/checkout/upgrade/restart vocabulary verifies) — the same proof
-  of recent in-app billing-surface access the /v1/billing/*/start endpoints
-  require. ui-shared passes the (interval-refreshed)
-  `billing_action_tokens.portal`.
+  `{ "limit_cents": int | null }` — DEPRECATED (kept for older ui-shared
+  versions). Superseded by auto-provision; the legacy field is no longer
+  surfaced on the /home entitlement arm, and a legacy disabled/zero limit
+  maps to `auto_provision.enabled == false`.
+
+The old `GET .../billing/top-ups` purchase-history endpoint was REMOVED: the
+Billing tab's invoice history (`GET {billingBaseUrl}/v1/billing/invoices`)
+already contains those purchases — pack invoices carry clean line-item
+descriptions ("Additional credits — 1,000 credits", no trailing date range)
+and `kind: "credit_top_up"`.
