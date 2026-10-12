@@ -8,8 +8,15 @@
 // on legacy (Anvil) installs, and on apps with no feature registry — every
 // one of those resolves to null (render nothing), never an empty box.
 
+// The wire field is `credits_or_events`: the registry anticipates
+// event-denominated features, so a most_used row MAY carry a `unit` hint
+// ("credits" | "events"; singular spellings accepted). Absent -> "credits",
+// which is what every current backend emits.
+const normalizeUnit = (u) =>
+  typeof u === "string" && u.toLowerCase().startsWith("event") ? "events" : "credits";
+
 // Resolve the feature_usage block into render-ready shape:
-//   { mostUsed: [{ key, name, credits }],
+//   { mostUsed: [{ key, name, count, unit }],
 //     notInUse: [{ key, name, docsUrl, rationale }] }
 // Returns null when the block is absent/malformed or BOTH lists are empty
 // (an install using every detectable feature has nothing to show here).
@@ -21,7 +28,8 @@ export function resolveFeatureUsage(featureUsage) {
     .map((f) => ({
       key: f.key,
       name: f.name,
-      credits: typeof f.credits_or_events === "number" ? f.credits_or_events : 0,
+      count: typeof f.credits_or_events === "number" ? f.credits_or_events : 0,
+      unit: normalizeUnit(f.unit),
     }));
 
   const notInUse = (Array.isArray(featureUsage.not_in_use) ? featureUsage.not_in_use : [])

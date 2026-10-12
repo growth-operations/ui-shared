@@ -12,6 +12,14 @@ import { featureUsageOf } from "../lib/featureUsage";
 // has rows, and the whole thing renders NOTHING when the block is absent
 // (older backends, legacy installs) — absence is never an empty box.
 
+// Singular/plural label for a row's unit ("credits" | "events") — the wire
+// field is credits_or_events, so an event-denominated feature must not be
+// mislabeled as credits.
+const unitLabel = (unit, count) => {
+  const singular = unit === "events" ? "event" : "credit";
+  return count === 1 ? singular : `${singular}s`;
+};
+
 function MostUsedTile({ mostUsed }) {
   if (mostUsed.length === 0) return null;
   return (
@@ -22,7 +30,7 @@ function MostUsedTile({ mostUsed }) {
           <Flex key={f.key} direction="row" gap="small">
             <Text>{f.name}</Text>
             <Text variant="microcopy">
-              {f.credits} {f.credits === 1 ? "credit" : "credits"}
+              {f.count} {unitLabel(f.unit, f.count)}
             </Text>
           </Flex>
         ))}

@@ -56,8 +56,8 @@ describe("resolveFeatureUsage", () => {
       })
     );
     expect(view.mostUsed).toEqual([
-      { key: "a", name: "A", credits: 3 },
-      { key: "b", name: "B", credits: 0 },
+      { key: "a", name: "A", count: 3, unit: "credits" },
+      { key: "b", name: "B", count: 0, unit: "credits" },
     ]);
     expect(view.notInUse).toEqual([
       {
@@ -66,6 +66,25 @@ describe("resolveFeatureUsage", () => {
         docsUrl: "https://example.com/guide",
         rationale: "Build static lists of the records nearest to any location.",
       },
+    ]);
+  });
+
+  it("carries the row's unit hint, defaulting to credits", () => {
+    const view = resolveFeatureUsage({
+      most_used: [
+        { key: "a", name: "A", credits_or_events: 3, unit: "events" },
+        { key: "b", name: "B", credits_or_events: 1, unit: "event" }, // singular ok
+        { key: "c", name: "C", credits_or_events: 2, unit: "credits" },
+        { key: "d", name: "D", credits_or_events: 2, unit: "bogus" }, // -> credits
+        { key: "e", name: "E", credits_or_events: 2 }, // absent -> credits
+      ],
+    });
+    expect(view.mostUsed.map((f) => f.unit)).toEqual([
+      "events",
+      "events",
+      "credits",
+      "credits",
+      "credits",
     ]);
   });
 
@@ -125,6 +144,25 @@ describe("FeatureUsage", () => {
     expect(text).toContain(
       "Build static lists of the records nearest to any location."
     );
+  });
+
+  it("labels event-denominated rows as events, not credits", () => {
+    const tree = renderComponent(FeatureUsage, {
+      state: {
+        state: {
+          feature_usage: {
+            most_used: [
+              { key: "a", name: "A", credits_or_events: 7, unit: "events" },
+              { key: "b", name: "B", credits_or_events: 1, unit: "events" },
+            ],
+          },
+        },
+      },
+    });
+    const text = textOf(tree);
+    expect(text).toContain("7 events");
+    expect(text).toContain("1 event"); // singular
+    expect(text).not.toContain("credit");
   });
 
   it("links each recommendation to its guide", () => {
