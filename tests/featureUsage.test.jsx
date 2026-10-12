@@ -167,9 +167,10 @@ describe("FeatureUsage", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AppHome integration — the cockpit gate (post-checklist only). AppHome's
-// InstallProgress child uses hooks, so these go through shallowResolve and
-// assert on the FeatureUsage node itself rather than its rendered text.
+// AppHome integration — the cockpit gate (post-setup-steps; the paid-gated
+// plan step does NOT hold the sections back). AppHome's InstallProgress child
+// uses hooks, so these go through shallowResolve and assert on the
+// FeatureUsage node itself rather than its rendered text.
 // ---------------------------------------------------------------------------
 
 // Minimal activated-cockpit payload; the block lives at payload.state.feature_usage.
@@ -177,7 +178,14 @@ const cockpit = (over = {}) => ({
   app: { name: "Geocoding & Geofencing", app_key: "hubspot_geocoding" },
   activation: { status: "completed", complete: true, step: 5, total: 5, warnings: [] },
   health: { level: "healthy", reasons: [] },
-  onboarding: { complete: true, steps: [] },
+  onboarding: {
+    complete: true,
+    steps: [
+      { key: "install", label: "Install Geocoding", done: true },
+      { key: "workflow", label: "Add a Geocode Record action to a workflow", done: true },
+      { key: "plan", label: "Choose a plan", done: true, cta_route: "/billing" },
+    ],
+  },
   nudges: [],
   ...over,
 });
@@ -191,18 +199,93 @@ describe("AppHome + FeatureUsage", () => {
     expect(nodes[0].state).toBe(payload);
   });
 
-  it("stays hidden while the checklist is unfinished, even with the block", () => {
+  it("stays hidden while a non-billing setup step is unfinished, even with the block", () => {
     const tree = shallowResolve(
       AppHome({
         state: cockpit({
           onboarding: {
             complete: false,
-            steps: [{ key: "plan", label: "Choose a plan", done: false }],
+            steps: [
+              { key: "install", label: "Install Geocoding", done: true },
+              {
+                key: "workflow",
+                label: "Add a Geocode Record action to a workflow",
+                done: false,
+              },
+              { key: "plan", label: "Choose a plan", done: false, cta_route: "/billing" },
+            ],
           },
           state: { feature_usage: block() },
         }),
       })
     );
     expect(findAll(tree, "FeatureUsage")).toHaveLength(0);
+  });
+
+  it("SHOWS the sections for a trial user — plan step open, other steps done", () => {
+    // Every registry app marks Choose-a-plan done=on_paid, so gating on
+    // onboarding.complete would hide FeatureUsage from free/trial installs
+    // forever. The paid-gated step must not hold the sections back.
+    const tree = shallowResolve(
+      AppHome({
+        state: cockpit({
+          onboarding: {
+            complete: false,
+            steps: [
+              { key: "install", label: "Install Geocoding", done: true },
+              {
+                key: "workflow",
+                label: "Add a Geocode Record action to a workflow",
+                done: true,
+              },
+              { key: "plan", label: "Choose a plan", done: false, cta_route: "/billing" },
+            ],
+          },
+          state: { feature_usage: block() },
+        }),
+      })
+    );
+    expect(findAll(tree, "FeatureUsage")).toHaveLength(1);
+  });
+
+  it("treats a step routed to /billing as paid-gated even under another key", () => {
+    const tree = shallowResolve(
+      AppHome({
+        state: cockpit({
+          onboarding: {
+            complete: false,
+            steps: [
+              { key: "install", label: "Install", done: true },
+              { key: "upgrade", label: "Pick a plan", done: false, cta_route: "/billing" },
+            ],
+          },
+          state: { feature_usage: block() },
+        }),
+      })
+    );
+    expect(findAll(tree, "FeatureUsage")).toHaveLength(1);
+  });
+
+  it("keeps the legacy block-level gate when the backend sends no step model", () => {
+    // steps absent/empty -> fall back to onboarding.complete (old behavior).
+    const incomplete = shallowResolve(
+      AppHome({
+        state: cockpit({
+          onboarding: { complete: false, steps: [] },
+          state: { feature_usage: block() },
+        }),
+      })
+    );
+    expect(findAll(incomplete, "FeatureUsage")).toHaveLength(0);
+
+    const complete = shallowResolve(
+      AppHome({
+        state: cockpit({
+          onboarding: { complete: true, steps: [] },
+          state: { feature_usage: block() },
+        }),
+      })
+    );
+    expect(findAll(complete, "FeatureUsage")).toHaveLength(1);
   });
 });
