@@ -59,16 +59,26 @@ export function hasTopUpBank(ent) {
 //                          no bank section)
 //   alert                — { variant, title, message } or null
 //   grantExpiresAt       — pass-through for the free-grant countdown
+//   renewsOn             — "YYYY-MM-DD" the monthly pool renews on, from the
+//                          state.credits block (null when absent)
 //
 // BAR COLORS ARE PER-BAR FILL LEVELS (Jasper 2026-10): a pool at 99% used
 // with a full bank must NOT render green just because the account is healthy
 // — each bar colors by its own level; the StatusTag keeps the account-state
-// colors. Thresholds mirror the backend's ~80/95 low-credit alert ladder
-// (common.entitlements LOW/DEPLETED banding). Comparisons are integer
-// cross-multiplications — no float fuzz at the 80/95/50/20 boundaries.
+// colors. The pool bar colors on % CONSUMED (Andrew 2026-10: green under
+// 50%, orange 50–80%, red over 80%). Comparisons are integer
+// cross-multiplications — no float fuzz at the 50/80/20 boundaries.
 //
-//   pool (DEPLETION meter, value = poolUsed of poolGrant):
-//     success when used < 80%, warning at >= 80%, danger at >= 95%.
+// THE state.credits BLOCK (2026-10 contract addition): when the payload
+// carries `credits` ({ monthly: { remaining, included, renews_on },
+// additional: { remaining, purchased, expires } }) it is AUTHORITATIVE for
+// the two-bucket display — no deriving pool/bank from the entitlement's
+// combined numbers. Absent (older backends) -> the legacy entitlement
+// derivation below, unchanged.
+//
+//   pool (DEPLETION meter, value = poolUsed of poolGrant), colored on %
+//     consumed per Andrew's 2026-10 feedback: success under 50% used, warning
+//     from 50% through 80%, danger over 80%.
 //   bank (LEVEL gauge, value = bankRemaining of bankGranted):
 //     success above 50% full, warning at <= 50%. NO danger variant:
 //     HubSpot's ProgressBar paints the WHOLE TRACK red in danger (not just
@@ -78,8 +88,8 @@ export function hasTopUpBank(ent) {
 //     danger stays on the pool bar, where near-full is the truth.
 function poolBarVariantFor(poolUsed, poolGrant) {
   if (!(poolGrant > 0)) return "success"; // no grant: nothing to deplete
-  if (poolUsed * 100 >= 95 * poolGrant) return "danger";
-  if (poolUsed * 100 >= 80 * poolGrant) return "warning";
+  if (poolUsed * 100 > 80 * poolGrant) return "danger";
+  if (poolUsed * 100 >= 50 * poolGrant) return "warning";
   return "success";
 }
 
@@ -88,10 +98,14 @@ function bankBarVariantFor(bankRemaining, bankGranted) {
   if (bankRemaining * 100 <= 50 * bankGranted) return "warning";
   return "success";
 }
-export function resolveCreditMeter(entitlement, creditMeter) {
+export function resolveCreditMeter(entitlement, creditMeter, credits = null) {
   const ent = entitlement?.mode === "credits" ? entitlement : null;
   const meter = creditMeter ?? null;
-  if (!ent && !meter) return null;
+  // The state.credits block stands on its own (it IS the credit data), so it
+  // keeps the meter alive even on a payload whose entitlement arm is missing.
+  const creditsBlock =
+    credits && (credits.monthly || credits.additional) ? credits : null;
+  if (!ent && !meter && !creditsBlock) return null;
 
   // Number precedence: once the entitlement arm carries the top-up fields it
   // is authoritative — the credit_meter block stays RAW pool-only under the
@@ -103,9 +117,25 @@ export function resolveCreditMeter(entitlement, creditMeter) {
   const pick = (key) =>
     entHasTopUpFields ? ent[key] ?? meter?.[key] : meter?.[key] ?? ent?.[key];
 
-  const granted = pick("granted") ?? 0;
-  const used = pick("used") ?? 0;
-  const remaining = pick("remaining") ?? Math.max(granted - used, 0);
+  // Number source: the state.credits block when present (authoritative
+  // two-bucket numbers), else the entitlement/meter precedence chain.
+  let granted;
+  let used;
+  let remaining;
+  if (creditsBlock) {
+    const monthly = creditsBlock.monthly ?? {};
+    const additional = creditsBlock.additional ?? {};
+    const poolGrant = Math.max(0, monthly.included ?? 0);
+    const poolRemaining = Math.max(0, monthly.remaining ?? 0);
+    const bankRemaining = Math.max(0, additional.remaining ?? 0);
+    granted = poolGrant + bankRemaining;
+    remaining = poolRemaining + bankRemaining;
+    used = Math.max(granted - remaining, 0);
+  } else {
+    granted = pick("granted") ?? 0;
+    used = pick("used") ?? 0;
+    remaining = pick("remaining") ?? Math.max(granted - used, 0);
+  }
 
   const onPaidPlan = !!ent?.plan;
   const lowThreshold = ent?.low_threshold ?? 0;
@@ -125,22 +155,45 @@ export function resolveCreditMeter(entitlement, creditMeter) {
   // bank portion is bankRemaining and the rest is pool remaining; the pool
   // segment's full size is the combined denominator minus the bank.
   //
-  // The bank section renders ONLY while the bank has credits left
-  // (bankRemaining > 0): a zero bank — never topped up, or fully burned —
-  // renders the plain single-pool bar, and with bankRemaining 0 the combined
-  // numbers ARE the pool numbers (granted == poolGrant, remaining ==
-  // poolRemaining), so nothing is lost.
+  // Under the state.credits block the two-bucket layout is ALWAYS in force:
+  // the monthly line (+ "Renews on" subline + pool bar) renders even when the
+  // account has never bought additional credits; the additional-credits line
+  // rides along only when the account has (or ever bought) a bank —
+  // purchased > 0 carries the true lifetime total, so a spent bank reads
+  // "0 of 1,000 left" instead of disappearing (bank.showAdditional).
+  //
+  // Under the legacy derivation (no credits block) the bank section renders
+  // ONLY while the bank has credits left (bankRemaining > 0): a zero bank —
+  // never topped up, or fully burned — renders the plain single-pool bar, and
+  // with bankRemaining 0 the combined numbers ARE the pool numbers (granted
+  // == poolGrant, remaining == poolRemaining), so nothing is lost.
   let bank = null;
-  const bankRemaining = Math.max(0, ent?.top_up_bank_remaining ?? 0);
-  if (bankRemaining > 0) {
-    const poolGrant = Math.max(granted - bankRemaining, 0);
-    const poolRemaining = Math.min(Math.max(remaining - bankRemaining, 0), poolGrant);
+  const bankRemaining = creditsBlock
+    ? Math.max(0, creditsBlock.additional?.remaining ?? 0)
+    : Math.max(0, ent?.top_up_bank_remaining ?? 0);
+  const bankGrantedTotal = creditsBlock
+    ? Math.max(0, creditsBlock.additional?.purchased ?? 0)
+    : Math.max(0, ent?.top_up_bank_granted ?? 0);
+  if (creditsBlock || bankRemaining > 0) {
+    const poolGrant = creditsBlock
+      ? Math.max(0, creditsBlock.monthly?.included ?? 0)
+      : Math.max(granted - bankRemaining, 0);
+    const poolRemaining = creditsBlock
+      ? Math.min(Math.max(0, creditsBlock.monthly?.remaining ?? 0), poolGrant)
+      : Math.min(Math.max(remaining - bankRemaining, 0), poolGrant);
     bank = {
       bankRemaining,
       // The bank's lifetime granted total — the bank bar's denominator. 0 on
       // backends that predate top_up_bank_granted (the component degrades to
       // a text-only bank line; never divide by zero, never "of 0").
-      bankGranted: Math.max(0, ent?.top_up_bank_granted ?? 0),
+      bankGranted: bankGrantedTotal,
+      // Whether the additional-credits line renders at all. Legacy path: yes
+      // (we only get here with bankRemaining > 0). credits block: only when
+      // the account has or bought a bank — otherwise the two-bucket layout is
+      // just the monthly line.
+      showAdditional: creditsBlock
+        ? bankRemaining > 0 || bankGrantedTotal > 0
+        : true,
       poolGrant,
       poolRemaining,
       poolUsed: poolGrant - poolRemaining,
@@ -158,7 +211,7 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     tagLabel = "Depleted";
   } else if (thresholdState === "top_up_failed") {
     tagVariant = "danger";
-    tagLabel = "Top-up failed";
+    tagLabel = "Couldn't add credits";
   } else if (thresholdState === "limit_reached") {
     tagVariant = "warning";
     tagLabel = "Limit reached";
@@ -195,7 +248,7 @@ export function resolveCreditMeter(entitlement, creditMeter) {
       variant: "error",
       title: "You're out of credits",
       message: onPaidPlan
-        ? "Actions are paused until your next billing period or a successful top-up."
+        ? "Actions are paused until your plan renews or more credits are added."
         : "Choose a plan to resume your use.",
     };
   } else if (thresholdState === "top_up_failed") {
@@ -203,14 +256,14 @@ export function resolveCreditMeter(entitlement, creditMeter) {
       variant: "error",
       title: "We couldn't add credits",
       message:
-        "The automatic top-up charge failed — update your payment method in Billing.",
+        "The automatic additional-credits purchase failed — update your payment method in Billing.",
     };
   } else if (thresholdState === "limit_reached") {
     alert = {
       variant: "warning",
       title: "Billing limit reached",
       message:
-        "Automatic top-ups are paused at your spending limit for this period. Raise your billing limit in Billing to resume them.",
+        "Automatic additional-credit purchases are paused at your spending limit for this period. Raise your billing limit in Billing to resume them.",
     };
   } else if (overIncluded) {
     alert = {
@@ -223,7 +276,8 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     alert = {
       variant: "warning",
       title: "Running low on credits",
-      message: "You're getting close to your limit — pick a plan to top up.",
+      message:
+        "You're getting close to your limit — pick a plan or add more credits.",
     };
   }
 
@@ -242,6 +296,9 @@ export function resolveCreditMeter(entitlement, creditMeter) {
     bankBarVariant,
     alert,
     grantExpiresAt: ent?.grant_expires_at ?? null,
+    // "YYYY-MM-DD" the monthly pool renews on (state.credits block only; null
+    // on older backends — the component just skips the subline).
+    renewsOn: creditsBlock ? (creditsBlock.monthly?.renews_on ?? null) : null,
   };
 }
 
@@ -282,7 +339,7 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
     return {
       variant: "error",
       title: "We couldn't add credits",
-      message: `The automatic top-up charge failed. Update your payment method so your ${noun} aren't interrupted.`,
+      message: `The automatic additional-credits purchase failed. Update your payment method so your ${noun} aren't interrupted.`,
       cta: { kind: "portal", label: "Update payment method" },
     };
   }
@@ -291,7 +348,7 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
       variant: "warning",
       title: "Billing limit reached",
       message:
-        "Automatic top-ups are paused — you've hit your spending limit for this billing period. Raise your billing limit to keep them going.",
+        "Automatic additional-credit purchases are paused — you've hit your spending limit for this billing period. Raise your billing limit to keep them going.",
       cta: { kind: "billing", label: "Raise your billing limit" },
     };
   }
@@ -312,7 +369,7 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
       variant: "error",
       title: "You're out of credits",
       message: onPaidPlan
-        ? `Your ${noun} are paused until your next billing period or a successful top-up.`
+        ? `Your ${noun} are paused until your plan renews or more credits are added.`
         : `Your credits are used up. Choose a plan in Billing to keep ${label}.`,
       cta: { kind: "billing", label: "Go to Billing →" },
     };

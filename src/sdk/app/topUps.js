@@ -28,24 +28,18 @@ export async function getTopUps(context, { appKey, portalId } = {}) {
   return callAppApi(context, billingPath(appKey, "top-ups", portalId), "GET");
 }
 
-// GET {billingBaseUrl}/v1/billing/invoices?token=... ->
-//   { invoices: [{ id, date, description, amount_cents, currency, status,
-//                  hosted_invoice_url, kind }] }  (newest first, capped at 24)
-//
-// The billing service (growth-ops-apps-app), NOT base — see the header note.
-// Auth is the signed billing-action `token` query param
-// (common.billing.action_token): the endpoint is read-only and accepts any
-// action; BillingTab passes the (interval-refreshed)
-// state.billing_action_tokens.portal. The claim carries app_key + portal_id,
-// so the response is scoped to THIS portal's Stripe customer — never a
-// stranger's invoices.
-//
-// Throws AppApiError on failure, with the FastAPI {"detail": ...} string as
-// the message — a 404 means the billing service predates the invoices route
-// (the caller hides the section rather than erroring forever).
-export async function getInvoices({ billingBaseUrl, token } = {}) {
-  const url = `${billingBaseUrl}/v1/billing/invoices?token=${encodeURIComponent(token)}`;
-  const response = await hubspot.fetch(url, { timeout: 10000, method: "GET" });
+// Shared fetch for the BILLING service's token-auth routes
+// (/v1/billing/*) — bare hubspot.fetch with the signed action token as a
+// query param, no custom headers (the platform rejects them), body as a plain
+// object (hubspot.fetch serializes it; see callAppApi's header note).
+// Throws AppApiError on failure with the FastAPI {"detail": ...} string as
+// the message.
+async function billingFetch(url, { method = "GET", body } = {}) {
+  const response = await hubspot.fetch(url, {
+    timeout: 10000,
+    method,
+    ...(body && { body }),
+  });
   if (!response.ok) {
     const errorText = await response.text();
     // FastAPI errors come back as {"detail": "..."} — surface just the detail
@@ -62,6 +56,39 @@ export async function getInvoices({ billingBaseUrl, token } = {}) {
     throw new AppApiError(message, response.status, errorText);
   }
   return response.json();
+}
+
+// GET {billingBaseUrl}/v1/billing/invoices?token=... ->
+//   { invoices: [{ id, date, description, amount_cents, currency, status,
+//                  hosted_invoice_url, kind }] }  (newest first, capped at 24)
+//
+// The billing service (growth-ops-apps-app), NOT base — see the header note.
+// Auth is the signed billing-action `token` query param
+// (common.billing.action_token): the endpoint is read-only and accepts any
+// action; BillingTab passes the (interval-refreshed)
+// state.billing_action_tokens.portal. The claim carries app_key + portal_id,
+// so the response is scoped to THIS portal's Stripe customer — never a
+// stranger's invoices.
+//
+// A 404 means the billing service predates the invoices route (the caller
+// hides the section rather than erroring forever).
+export async function getInvoices({ billingBaseUrl, token } = {}) {
+  const url = `${billingBaseUrl}/v1/billing/invoices?token=${encodeURIComponent(token)}`;
+  return billingFetch(url, { method: "GET" });
+}
+
+// POST {billingBaseUrl}/v1/billing/auto-provision?token=..., body
+// { enabled: bool } — set the account's auto-provision flag (REPLACES the old
+// billing-limit concept): enabled buys another pack of additional credits
+// when the monthly credits run out; disabled means no purchase and actions
+// start failing the entitlement gate.
+//
+// Same token-auth posture as getInvoices (the claim scopes the change to THIS
+// portal's account); BillingTab passes the interval-refreshed
+// state.billing_action_tokens.portal.
+export async function setAutoProvision({ billingBaseUrl, token, enabled } = {}) {
+  const url = `${billingBaseUrl}/v1/billing/auto-provision?token=${encodeURIComponent(token)}`;
+  return billingFetch(url, { method: "POST", body: { enabled: !!enabled } });
 }
 
 // POST /v1/hubspot/app_pages/{app}/billing/limit, body { limit_cents: int|null }

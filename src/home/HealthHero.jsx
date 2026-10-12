@@ -23,6 +23,11 @@ export function HealthHero({ appName, state }) {
   const name = appName ?? state.app?.name;
 
   if (health?.level) {
+    // Plan-fit reinforcement: a healthy verdict on the right plan gets the
+    // extra reassurance line; upgrade_recommended is carried by health
+    // v2's "attention" reasons + the PlanFitBanner, not here.
+    const onRightPlan =
+      health.level === "healthy" && state.plan_fit?.verdict === "right_plan";
     return (
       <Flex direction="column" gap="small">
         {name && <Heading>{name}</Heading>}
@@ -34,6 +39,7 @@ export function HealthHero({ appName, state }) {
             {(health.reasons ?? []).map((r, i) => (
               <Text key={i}>{r}</Text>
             ))}
+            {onRightPlan && <Text>...and you're on the right plan</Text>}
           </Flex>
         </Alert>
       </Flex>

@@ -10,6 +10,12 @@ import { Flex, Tile, Text, ProgressBar, Link, Button } from "@hubspot/ui-extensi
 // `onNavigate(route)` is supplied by the host app (PageLink can't be created
 // here without the router); cta_url renders as an external Link.
 export function OnboardingChecklist({ onboarding, onNavigate }) {
+  // The Getting Started checklist disappears entirely once complete — no
+  // "all done" state (Andrew's 2026-10 feedback). AppHome gates on the same
+  // flag; this guard covers direct consumers.
+  if (onboarding?.complete === true) {
+    return null;
+  }
   if (!onboarding || !Array.isArray(onboarding.steps) || onboarding.steps.length === 0) {
     return null;
   }

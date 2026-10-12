@@ -4,8 +4,10 @@ import { InstallProgress } from "./InstallProgress";
 import { HealthHero } from "./HealthHero";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { SyncPulse } from "./SyncPulse";
-import { CreditMeter } from "./CreditMeter";
 import { FeatureUsage } from "./FeatureUsage";
+import { TrialBanner } from "./TrialBanner";
+import { PlanFitBanner } from "./PlanFitBanner";
+import { PeriodComparison } from "./PeriodComparison";
 import { FeatureNudges } from "./FeatureNudges";
 import { HelpfulLinks } from "./HelpfulLinks";
 
@@ -45,17 +47,11 @@ function PipelineTile({ pipeline }) {
 }
 
 // Picks the single archetype activity tile (CONTRACT: at most ONE present).
-// credit_meter / credits mode -> CreditMeter; sync_pulse -> SyncPulse;
-// pipeline -> PipelineTile. Renders nothing when none apply.
+// sync_pulse -> SyncPulse; pipeline -> PipelineTile. The credit meter is
+// deliberately NOT on Home anymore (Andrew's 2026-10 feedback) — it lives at
+// the top of the Usage tab; Home's credit story is the trial banner plus the
+// post-checklist period comparison. Renders nothing when no tile applies.
 function ArchetypeTile({ state }) {
-  if (state.credit_meter || state.entitlement?.mode === "credits") {
-    return (
-      <CreditMeter
-        entitlement={state.entitlement}
-        creditMeter={state.credit_meter}
-      />
-    );
-  }
   if (state.sync_pulse) return <SyncPulse syncPulse={state.sync_pulse} />;
   if (state.pipeline) return <PipelineTile pipeline={state.pipeline} />;
   return null;
@@ -67,9 +63,14 @@ function ArchetypeTile({ state }) {
 // Lifecycle composition:
 //   no state            -> LoadingSpinner (still fetching /v1/home)
 //   activation pending  -> <InstallProgress> (install isn't finished yet)
-//   activated cockpit   -> <HealthHero>
+//   activated cockpit   -> <TrialBanner> (credit apps on the free grant)
+//                          + <HealthHero> (+ "...on the right plan" when
+//                            plan_fit says so)
+//                          + <PlanFitBanner> (upgrade_recommended only)
 //                          + <OnboardingChecklist> (only if not complete)
-//                          + the archetype activity tile (sync/credit/pipeline)
+//                          + the archetype activity tile (sync/pipeline)
+//                          + <PeriodComparison> (post-checklist, when the
+//                            backend has a full closed period)
 //                          + <FeatureUsage> (once the non-billing setup steps
 //                            are done; needs the backend's state.feature_usage
 //                            block)
@@ -135,13 +136,25 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
           callout above the cockpit; InstallProgress renders null when clean. */}
       <InstallProgress state={state} onRetry={onRetry} />
 
+      {/* Trial states (active countdown / ended / out of credits) fly above
+          the hero — they're the strongest call to action a free account
+          has. Renders null for paid plans and non-credits modes. */}
+      <TrialBanner state={state} appName={appName} />
+
       <HealthHero appName={appName} state={state} />
+
+      {/* plan_fit upgrade_recommended — the savings banner. */}
+      <PlanFitBanner state={state} />
 
       {state.onboarding && !onboardingComplete && (
         <OnboardingChecklist onboarding={state.onboarding} onNavigate={onNavigate} />
       )}
 
       <ArchetypeTile state={state} />
+
+      {/* Post-checklist: the period-over-period comparison (null until the
+          install has one full closed period). */}
+      {onboardingComplete && <PeriodComparison state={state} />}
 
       {/* Most used / recommended-to-explore (state.feature_usage) — renders
           nothing on backends without the block or for legacy installs. Gated
