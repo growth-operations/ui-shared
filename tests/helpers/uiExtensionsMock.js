@@ -49,4 +49,5 @@ export const TableRow = marker("TableRow");
 export const Tag = marker("Tag");
 export const Text = marker("Text");
 export const Tile = marker("Tile");
+export const Toggle = marker("Toggle");
 export const ToggleGroup = marker("ToggleGroup");

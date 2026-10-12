@@ -126,6 +126,7 @@ describe("resolveCreditMeter", () => {
       bankRemaining: 700,
       bankGranted: 1000,
       bankLow: false,
+      showAdditional: true,
       poolGrant: 1000,
       poolRemaining: 1000,
       poolUsed: 0,
@@ -148,6 +149,7 @@ describe("resolveCreditMeter", () => {
       bankRemaining: 500,
       bankGranted: 1000,
       bankLow: false,
+      showAdditional: true,
       poolGrant: 1000,
       poolRemaining: 0,
       poolUsed: 1000,
@@ -168,6 +170,7 @@ describe("resolveCreditMeter", () => {
       bankRemaining: 1000,
       bankGranted: 1000,
       bankLow: false,
+      showAdditional: true,
       poolGrant: 1000,
       poolRemaining: 600,
       poolUsed: 400,
@@ -255,7 +258,7 @@ describe("resolveCreditMeter", () => {
       variant: "error",
       title: "You're out of credits",
       message:
-        "Actions are paused until your next billing period or a successful top-up.",
+        "Actions are paused until your plan renews or more credits are added.",
     });
     // Bank is spent — with bankRemaining 0 there is no bank section; the
     // plain single-pool branch renders (combined numbers == pool numbers).
@@ -287,7 +290,7 @@ describe("resolveCreditMeter", () => {
       topupWithBank({ threshold_state: "top_up_failed" }),
       null
     );
-    expect(view.tagLabel).toBe("Top-up failed");
+    expect(view.tagLabel).toBe("Couldn't add credits");
     expect(view.tagVariant).toBe("danger");
     expect(view.alert.variant).toBe("error");
     expect(view.alert.title).toBe("We couldn't add credits");
@@ -332,18 +335,19 @@ describe("resolveCreditMeter", () => {
     expect(view.bankBarVariant).toBe("success"); // the bank is full
   });
 
-  it("colors the pool bar by its own depletion ratio (80/95 ladder)", () => {
-    // Boundaries: <80% success, >=80% warning, >=95% danger — integer
-    // cross-multiplication, so 80/100 and 95/100 land exactly on the rungs.
+  it("colors the pool bar by its own consumed ratio (50/80 ladder)", () => {
+    // Andrew 2026-10: green under 50% consumed, orange 50-80%, red over 80%.
+    // Boundaries: <50% success, >=50% warning, >80% danger — integer
+    // cross-multiplication, so 50/100 and 80/100 land exactly on the rungs.
     const single = (used) =>
       resolveCreditMeter(
         legacyFree({ granted: 100, used, remaining: 100 - used }),
         null
       ).poolBarVariant;
-    expect(single(79)).toBe("success");
+    expect(single(49)).toBe("success");
+    expect(single(50)).toBe("warning");
     expect(single(80)).toBe("warning");
-    expect(single(94)).toBe("warning");
-    expect(single(95)).toBe("danger");
+    expect(single(81)).toBe("danger");
   });
 
   it("colors the bank bar by its own remaining level (50 rung; NO danger — the track paints full red)", () => {
@@ -463,7 +467,7 @@ describe("resolveBillingBanner", () => {
     expect(banner.variant).toBe("error");
     expect(banner.title).toBe("You're out of credits");
     expect(banner.message).toBe(
-      "Your task actions are paused until your next billing period or a successful top-up."
+      "Your task actions are paused until your plan renews or more credits are added."
     );
   });
 

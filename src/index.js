@@ -14,12 +14,17 @@ export { FeatureNudges } from "./home/FeatureNudges";
 export { FeatureUsage } from "./home/FeatureUsage";
 export { CreditMeter } from "./home/CreditMeter";
 export { HelpfulLinks } from "./home/HelpfulLinks";
+export { TrialBanner } from "./home/TrialBanner";
+export { PlanFitBanner } from "./home/PlanFitBanner";
+export { PeriodComparison } from "./home/PeriodComparison";
+export { UsageHighlights } from "./home/UsageHighlights";
 
 // Billing.
 export { BillingTab } from "./billing/BillingTab";
 export { PlanGrid } from "./billing/PlanGrid";
 export { BillingBanner } from "./billing/BillingBanner";
 export { SubscriptionGate } from "./billing/SubscriptionGate";
+export { AutoProvisionToggle } from "./billing/AutoProvisionToggle";
 
 // Alerts — the shared customer alerts table (level filter, sort, dismiss).
 export { AlertsTab } from "./alerts/AlertsTab";
@@ -52,6 +57,22 @@ export {
   resolveBillingBanner,
   parseLimitInput,
 } from "./lib/creditDisplay";
+export {
+  TRIAL_BANNER_FOOTER,
+  resolveTrialBanner,
+  resolvePlanFit,
+  resolvePeriodComparison,
+} from "./lib/homeBlocks";
+export {
+  AUTO_PROVISION_TITLE,
+  AUTO_PROVISION_CONFIRM_YES,
+  AUTO_PROVISION_CONFIRM_NO,
+  AUTO_PROVISION_IDLE,
+  autoProvisionSubtext,
+  autoProvisionConfirmBody,
+  resolveAutoProvision,
+  autoProvisionReducer,
+} from "./lib/autoProvision";
 
 // HubSpot URL builders (app.hubspot.com record/property/list links).
 export {
@@ -76,6 +97,7 @@ export {
   getTopUps,
   getInvoices,
   setBillingLimit,
+  setAutoProvision,
   getSettings,
   updateSettings,
   makeSettingsApi,

@@ -7,7 +7,6 @@ import {
   LoadingButton,
   Button,
   Alert,
-  Input,
   Link,
   LoadingSpinner,
   Table,
@@ -18,12 +17,13 @@ import {
   TableCell,
 } from "@hubspot/ui-extensions";
 import { fmtDate, fmtMoney, daysUntil } from "../lib/format";
-import { parseLimitInput } from "../lib/creditDisplay";
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { CreditMeter } from "../home/CreditMeter";
 import { PlanGrid } from "./PlanGrid";
+import { AutoProvisionToggle } from "./AutoProvisionToggle";
+import { resolveAutoProvision } from "../lib/autoProvision";
 import { refreshBillingActionTokens } from "../sdk/billing";
-import { getInvoices, getTopUps, setBillingLimit } from "../sdk/app/topUps";
+import { getInvoices } from "../sdk/app/topUps";
 
 // Billing action tokens (see common.billing.action_token) are signed with a
 // 5-minute TTL — short enough that a customer who opens the tab and comes
@@ -393,91 +393,6 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
   );
 }
 
-// The top-up purchase table itself — pure rendering (exported for tests);
-// fetch/loading/error live in TopUpHistory below.
-export function TopUpHistoryTable({ topUps }) {
-  return (
-    <>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeader>Date</TableHeader>
-            <TableHeader>Credits</TableHeader>
-            <TableHeader>Price</TableHeader>
-            <TableHeader>Note</TableHeader>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {topUps.map((topUp, i) => (
-            <TableRow key={`${topUp.at}-${i}`}>
-              <TableCell>{fmtDate(topUp.at)}</TableCell>
-              <TableCell>{topUp.credits}</TableCell>
-              <TableCell>{fmtMoney(topUp.price_cents)}</TableCell>
-              <TableCell>Does not expire</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <Text format={{ fontStyle: "italic" }}>
-        Additional credits don't expire — they draw down only after your
-        monthly plan credits.
-      </Text>
-    </>
-  );
-}
-
-// "Top-up history" — the credit app's prepaid top-up purchases (the
-// never-expiring bank), from the base service's
-// GET /v1/hubspot/app_pages/{app}/billing/top-ups (newest first). Loading,
-// error, and empty states; the table mirrors AlertsTab's shape.
-function TopUpHistory({ context, appKey }) {
-  const [status, setStatus] = useState("loading"); // loading | ready | error
-  const [topUps, setTopUps] = useState([]);
-
-  useStrictModeEffect(
-    async ({ mounted }) => {
-      try {
-        const res = await getTopUps(context, {
-          appKey,
-          portalId: context?.portal?.id,
-        });
-        if (mounted.current) {
-          setTopUps(res?.top_ups ?? []);
-          setStatus("ready");
-        }
-      } catch {
-        if (mounted.current) setStatus("error");
-      }
-    },
-    [context, appKey]
-  );
-
-  if (status === "loading") {
-    return <LoadingSpinner showLabel label="Loading top-ups…" />;
-  }
-  if (status === "error") {
-    return (
-      <Alert title="Couldn't load top-up history" variant="warning">
-        <Text>Refresh the page to try again.</Text>
-      </Alert>
-    );
-  }
-
-  return (
-    <Flex direction="column" gap="small">
-      <Heading>Top-up history</Heading>
-      {topUps.length === 0 ? (
-        <Text format={{ fontStyle: "italic" }}>
-          No top-ups yet. Additional credits you purchase are listed here —
-          they don't expire.
-        </Text>
-      ) : (
-        <TopUpHistoryTable topUps={topUps} />
-      )}
-    </Flex>
-  );
-}
-
 // Invoice status -> label (Stripe's vocabulary: paid / open / void /
 // uncollectible; drafts and $0 voids are filtered server-side).
 const INVOICE_STATUS_LABELS = {
@@ -527,10 +442,13 @@ export function InvoiceHistoryTable({ invoices }) {
 }
 
 // "Invoice history" — every Stripe invoice on the portal's customer
-// (subscription renewals, one-off charges, top-up bands — including VOIDED
-// top-ups, which tell the decline story), from the billing service's
-// GET /v1/billing/invoices (newest first, capped at 24). Loading, error, and
-// empty states mirror TopUpHistory.
+// (subscription renewals, one-off charges, additional-credit purchases —
+// including VOIDED top-ups, which tell the decline story), from the billing
+// service's GET /v1/billing/invoices (newest first, capped at 24). This is
+// the one purchase history surface now — the old Top-Up History section is
+// gone (Andrew's 2026-10 feedback); the base service keeps its deprecated
+// GET billing/top-ups empty-list stub so OLD released clients degrade
+// silently.
 //
 // Auth is the billing action token (the claim scopes the response to THIS
 // portal's Stripe customer). BillingTab re-mints the token set every 3
@@ -586,148 +504,11 @@ function InvoiceHistory({ billingBaseUrl, billingActionToken }) {
       <Heading>Invoice history</Heading>
       {invoices.length === 0 ? (
         <Text format={{ fontStyle: "italic" }}>
-          No invoices yet. Subscription renewals, one-off charges, and credit
-          top-ups are listed here.
+          No invoices yet. Subscription renewals, one-off charges, and
+          additional-credit purchases are listed here.
         </Text>
       ) : (
         <InvoiceHistoryTable invoices={invoices} />
-      )}
-    </Flex>
-  );
-}
-
-// "Billing limit" — the per-period spend cap on automatic top-ups. Shows the
-// current limit (when the entitlement arm carries billing_limit_cents), sets
-// a new one (USD input -> cents), or clears it, via the base service's
-// POST /v1/hubspot/app_pages/{app}/billing/limit. Success/error feedback is an
-// inline Alert, consistent with the rest of this tab.
-//
-// The POST requires a billing action token (?token=) on top of verify_hubspot
-// — billingActionToken should be the (interval-refreshed)
-// state.billing_action_tokens.portal. Without it (an older backend serving
-// /v1/home without minted tokens) the set/clear buttons stay disabled rather
-// than failing with a 401 — the same "hidden until token exists" posture as
-// the restart link.
-function BillingLimitControl({
-  context,
-  appKey,
-  currentLimitCents = null,
-  billingActionToken = null,
-}) {
-  const [limitCents, setLimitCents] = useState(currentLimitCents ?? null);
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState(null); // { variant, text }
-
-  // The entitlement arrives with /v1/home; adopt a changed server-side limit.
-  useEffect(() => {
-    setLimitCents(currentLimitCents ?? null);
-  }, [currentLimitCents]);
-
-  const canSubmit = !saving && !!billingActionToken;
-
-  const save = async () => {
-    const parsed = parseLimitInput(value);
-    if (!parsed.ok) {
-      setNotice({ variant: "error", text: parsed.error });
-      return;
-    }
-    setSaving(true);
-    setNotice(null);
-    try {
-      await setBillingLimit(context, {
-        appKey,
-        portalId: context?.portal?.id,
-        limitCents: parsed.limitCents,
-        token: billingActionToken,
-      });
-      setLimitCents(parsed.limitCents);
-      setValue("");
-      setNotice({
-        variant: "success",
-        text: `Billing limit set to ${fmtMoney(parsed.limitCents)} per billing period.`,
-      });
-    } catch (e) {
-      setNotice({
-        variant: "error",
-        text: e?.message ?? "Couldn't update the billing limit.",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const clear = async () => {
-    setSaving(true);
-    setNotice(null);
-    try {
-      await setBillingLimit(context, {
-        appKey,
-        portalId: context?.portal?.id,
-        limitCents: null,
-        token: billingActionToken,
-      });
-      setLimitCents(null);
-      setNotice({
-        variant: "success",
-        text: "Billing limit cleared — automatic top-ups are uncapped.",
-      });
-    } catch (e) {
-      setNotice({
-        variant: "error",
-        text: e?.message ?? "Couldn't clear the billing limit.",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Flex direction="column" gap="small">
-      <Heading>Billing limit</Heading>
-      <Text>
-        Cap how much automatic credit top-ups can spend each billing period.
-      </Text>
-      <Text format={{ fontWeight: "bold" }}>
-        {limitCents != null
-          ? `Current limit: ${fmtMoney(limitCents)} per billing period`
-          : "No limit set — automatic top-ups are uncapped."}
-      </Text>
-      <Flex direction="row" gap="small" align="end">
-        <Input
-          label="Limit (USD)"
-          name="billing-limit"
-          placeholder="e.g. 100.00"
-          value={value}
-          onChange={setValue}
-        />
-        <LoadingButton
-          variant="primary"
-          loading={saving}
-          disabled={!canSubmit || !value.trim()}
-          onClick={save}
-        >
-          Set limit
-        </LoadingButton>
-        {limitCents != null && (
-          <Button variant="secondary" disabled={!canSubmit} onClick={clear}>
-            Clear limit
-          </Button>
-        )}
-      </Flex>
-      {!billingActionToken && (
-        <Text format={{ fontStyle: "italic" }}>
-          Preparing billing… the limit controls unlock in a moment. Refresh the
-          page if this persists.
-        </Text>
-      )}
-      {notice && (
-        <Alert
-          variant={notice.variant}
-          title={notice.variant === "success" ? "Saved" : "Couldn't save"}
-        >
-          <Text>{notice.text}</Text>
-        </Alert>
       )}
     </Flex>
   );
@@ -817,8 +598,8 @@ export function CreditsBilling({ context, state, appKey, openIframe = null }) {
             sections (the safe direction — no dead UI). */}
         {state?.entitlement?.billing_model === "topup" && (
           <>
-            <TopUpHistory context={context} appKey={appKey} />
-            {/* Directly below Top-up history (Andrew's ask). `state` here is
+            {/* Invoice history is the one purchase list now (Top-Up History
+                is deleted — Andrew's 2026-10 feedback). `state` here is
                 BillingTab's interval-refreshed copy, so the token is re-minted
                 every 3 minutes; InvoiceHistory hides itself when the backend
                 or billing service predates the pieces it needs. */}
@@ -826,13 +607,16 @@ export function CreditsBilling({ context, state, appKey, openIframe = null }) {
               billingBaseUrl={base}
               billingActionToken={state?.billing_action_tokens?.portal ?? null}
             />
-            <BillingLimitControl
+            {/* "Add Additional Credits Automatically" — REPLACES the old
+                billing-limit control. The flag resolves from
+                state.auto_provision (default ON); the ON→OFF direction parks
+                in Andrew's exact confirmation copy. */}
+            <AutoProvisionToggle
               context={context}
               appKey={appKey}
-              // Populated for all accounts on the current contract
-              // (int cents | null; absent on older backends = no cap).
-              currentLimitCents={state?.entitlement?.billing_limit_cents ?? null}
-              // The limit POST's second auth dep (see setBillingLimit). `state`
+              enabled={resolveAutoProvision(state?.auto_provision).enabled}
+              appName={state?.app?.name ?? "this app"}
+              // The POST's second auth dep (see setAutoProvision). `state`
               // here is BillingTab's interval-refreshed copy, so this token is
               // re-minted every 3 minutes — a long-open tab never POSTs an
               // expired one.

@@ -75,7 +75,7 @@ describe("CreditMeter", () => {
     expect(text).not.toContain("1700 of 1700 credits left");
     expect(text).toContain("Monthly plan credits: 1000 of 1000 left");
     expect(text).toContain("Additional credits: 700 left");
-    expect(text).toContain("Additional credits don't expire.");
+    expect(text).toContain("Does not expire");
   });
 
   it("renders the bank bar as a remaining-level gauge when top_up_bank_granted is present", () => {
@@ -95,7 +95,7 @@ describe("CreditMeter", () => {
     expect(bars[1].value).toBe(700);
     expect(bars[1].maxValue).toBe(1700);
     expect(bars[1].variant).toBe("warning");
-    expect(textOf(tree)).toContain("Additional credits (never expire): 700 of 1700 left");
+    expect(textOf(tree)).toContain("Additional credits: 700 of 1700 left");
   });
 
   it("shows a warning 'Running low' tag (not a red bar) when the bank is <=20% full", () => {
@@ -160,18 +160,18 @@ describe("CreditMeter", () => {
     expect(bankVariant(200)).toBe("warning"); // 20% — NEVER danger (the track would paint full red); the "Running low" tag carries it
   });
 
-  it("pins the pool depletion ladder at the component level (80% warning, 95% danger)", () => {
-    // The no-bank legacy single bar follows the same ratio rule.
+  it("pins the pool depletion ladder at the component level (50% warning, >80% danger)", () => {
+    // The no-bank legacy single bar follows the same consumed-ratio rule.
     const singleVariant = (used) => {
       const tree = renderComponent(CreditMeter, {
         entitlement: legacyFree({ granted: 100, used, remaining: 100 - used }),
       });
       return findAll(tree, "ProgressBar")[0].variant;
     };
-    expect(singleVariant(79)).toBe("success");
+    expect(singleVariant(49)).toBe("success");
+    expect(singleVariant(50)).toBe("warning");
     expect(singleVariant(80)).toBe("warning");
-    expect(singleVariant(94)).toBe("warning");
-    expect(singleVariant(95)).toBe("danger");
+    expect(singleVariant(81)).toBe("danger");
   });
 
   it("collapses to the single pool bar when the bank is spent (bankRemaining 0)", () => {
@@ -211,7 +211,7 @@ describe("CreditMeter", () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0].variant).toBe("error");
     expect(textOf(alerts[0])).toContain(
-      "Actions are paused until your next billing period or a successful top-up."
+      "Actions are paused until your plan renews or more credits are added."
     );
   });
 
@@ -335,7 +335,7 @@ describe("BillingBanner", () => {
     const alert = findAll(tree, "Alert")[0];
     expect(alert.variant).toBe("error");
     expect(textOf(alert)).toContain(
-      "Your task actions are paused until your next billing period or a successful top-up."
+      "Your task actions are paused until your plan renews or more credits are added."
     );
   });
 

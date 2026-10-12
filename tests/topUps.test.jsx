@@ -1,6 +1,8 @@
-// SDK tests for the base-service top-up endpoints + the pure top-up history
-// table rendering. hubspot.fetch is the shared mock from
-// ./helpers/uiExtensionsMock.js.
+// SDK tests for the base-service billing endpoints (top-ups GET, billing-limit
+// POST, auto-provision POST) + the invoice-history table rendering. The Top-Up
+// History UI section was deleted (Andrew's 2026-10 feedback) — base keeps the
+// GET billing/top-ups empty-list stub for OLD released clients only.
+// hubspot.fetch is the shared mock from ./helpers/uiExtensionsMock.js.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 
@@ -9,12 +11,13 @@ vi.mock("@hubspot/ui-extensions", async () => {
 });
 
 import { hubspot } from "@hubspot/ui-extensions";
-import { getInvoices, getTopUps, setBillingLimit } from "../src/sdk/app/topUps";
 import {
-  InvoiceHistoryTable,
-  TopUpHistoryTable,
-  CreditsBilling,
-} from "../src/billing/BillingTab";
+  getInvoices,
+  getTopUps,
+  setBillingLimit,
+  setAutoProvision,
+} from "../src/sdk/app/topUps";
+import { InvoiceHistoryTable, CreditsBilling } from "../src/billing/BillingTab";
 import {
   renderComponent,
   renderShallow,
@@ -130,24 +133,52 @@ describe("setBillingLimit", () => {
   });
 });
 
-describe("TopUpHistoryTable", () => {
-  it("renders each purchase with date, credits, price, and the no-expiry note", () => {
-    const tree = renderComponent(TopUpHistoryTable, {
-      topUps: [
-        { at: "2026-09-20T14:03:00Z", credits: 1000, price_cents: 2900, period_key: "2026-09" },
-        { at: "2026-08-12T09:30:00Z", credits: 500, price_cents: 1500, period_key: "2026-08" },
-      ],
+describe("setAutoProvision", () => {
+  it("POSTs to the BASE app_pages auto-provision route (NOT the billing service)", async () => {
+    hubspot.fetch.mockResolvedValue(okJson({ enabled: false }));
+    await setAutoProvision(context, {
+      appKey: "hubspot_line_item",
+      portalId: 12345,
+      enabled: false,
+      token: "signed-action-token",
     });
-    const rows = findAll(tree, "TableRow");
-    expect(rows).toHaveLength(3); // header + 2 purchases
-    const text = textOf(tree);
-    expect(text).toContain("Sep 20, 2026");
-    expect(text).toContain("1000");
-    expect(text).toContain("$29");
-    expect(text).toContain("500");
-    expect(text).toContain("$15");
-    expect(text.match(/Does not expire/g)).toHaveLength(2);
-    expect(text).toContain("Additional credits don't expire");
+    const [url, init] = hubspot.fetch.mock.calls[0];
+    // The GOAA billing service has no /v1/billing/auto-provision — the route
+    // lives on base, same family as billing/limit.
+    expect(url).toBe(
+      "https://base.example.com/v1/hubspot/app_pages/hubspot_line_item/billing/auto-provision" +
+        "?portalId=12345&token=signed-action-token"
+    );
+    expect(init.method).toBe("POST");
+    expect(init.body).toEqual({ enabled: false });
+    expect(typeof init.body).toBe("object"); // never JSON.stringify'd
+  });
+
+  it("coerces enabled to a strict boolean", async () => {
+    hubspot.fetch.mockResolvedValue(okJson({ enabled: true }));
+    await setAutoProvision(context, {
+      appKey: "hubspot_line_item",
+      portalId: 12345,
+      enabled: 1,
+      token: "t",
+    });
+    expect(hubspot.fetch.mock.calls[0][1].body).toEqual({ enabled: true });
+  });
+
+  it("surfaces FastAPI detail strings on failure", async () => {
+    hubspot.fetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ detail: "Invalid or expired billing action token." }),
+    });
+    await expect(
+      setAutoProvision(context, {
+        appKey: "hubspot_line_item",
+        portalId: 1,
+        enabled: true,
+        token: "expired",
+      })
+    ).rejects.toThrow("Invalid or expired billing action token.");
   });
 });
 
@@ -266,11 +297,12 @@ describe("InvoiceHistoryTable", () => {
   });
 });
 
-// The BillingTab top-up sections are gated on the entitlement arm's
-// billing_model discriminator (populated for all accounts on the current
-// contract; absent on older backends — both non-topup cases hide the
-// sections). CreditsBilling is hook-free, so it renders shallowly: hookful
-// children (TopUpHistory/BillingLimitControl) are wrapped, not invoked.
+// The BillingTab top-up sections (invoice history + the auto-provision
+// toggle) are gated on the entitlement arm's billing_model discriminator
+// (populated for all accounts on the current contract; absent on older
+// backends — both non-topup cases hide the sections). CreditsBilling is
+// hook-free, so it renders shallowly: hookful children
+// (InvoiceHistory/AutoProvisionToggle) are wrapped, not invoked.
 describe("CreditsBilling top-up section gating", () => {
   const paidCreditsState = (entitlementOver = {}, stateOver = {}) => ({
     entitlement: {
@@ -298,35 +330,39 @@ describe("CreditsBilling top-up section gating", () => {
   });
   const ctx = { portal: { id: 12345 } };
 
-  it("renders history + invoices + limit for billing_model 'topup', wiring limit + token", () => {
+  it("renders invoices + the auto-provision toggle for billing_model 'topup', wiring the token", () => {
     const tree = renderShallow(CreditsBilling, {
       context: ctx,
       state: paidCreditsState(),
       appKey: "hubspot_line_item",
     });
-    expect(findAll(tree, "TopUpHistory")).toHaveLength(1);
-    // Invoice history sits directly below Top-up history, fed by the billing
-    // service base URL + the (interval-refreshed) portal action token.
+    // Top-Up History is deleted — invoice history is the one purchase list,
+    // fed by the billing service base URL + the (interval-refreshed) portal
+    // action token.
     const history = findAll(tree, "InvoiceHistory");
     expect(history).toHaveLength(1);
     expect(history[0].billingBaseUrl).toBe("https://billing.example.com");
     expect(history[0].billingActionToken).toBe("signed-token");
-    const controls = findAll(tree, "BillingLimitControl");
-    expect(controls).toHaveLength(1);
-    expect(controls[0].currentLimitCents).toBe(5000);
-    expect(controls[0].billingActionToken).toBe("signed-token");
+    // The toggle REPLACES the old billing-limit control; absent
+    // state.auto_provision resolves to enabled (the contract default).
+    const toggles = findAll(tree, "AutoProvisionToggle");
+    expect(toggles).toHaveLength(1);
+    expect(toggles[0].enabled).toBe(true);
+    expect(toggles[0].billingActionToken).toBe("signed-token");
+    expect(toggles[0].appKey).toBe("hubspot_line_item");
+    expect(toggles[0].context).toBe(ctx);
   });
 
-  it("reads a cleared limit (billing_limit_cents null) as no cap", () => {
+  it("reads state.auto_provision { enabled: false } as the OFF position", () => {
     const tree = renderShallow(CreditsBilling, {
       context: ctx,
-      state: paidCreditsState({ billing_limit_cents: null }),
+      state: paidCreditsState({}, { auto_provision: { enabled: false } }),
       appKey: "hubspot_line_item",
     });
-    expect(findAll(tree, "BillingLimitControl")[0].currentLimitCents).toBe(null);
+    expect(findAll(tree, "AutoProvisionToggle")[0].enabled).toBe(false);
   });
 
-  it("hides all three sections for billing_model 'metered' (threshold_state present)", () => {
+  it("hides both sections for billing_model 'metered' (threshold_state present)", () => {
     const tree = renderShallow(CreditsBilling, {
       context: ctx,
       state: paidCreditsState({
@@ -336,12 +372,11 @@ describe("CreditsBilling top-up section gating", () => {
       }),
       appKey: "hubspot_line_item",
     });
-    expect(findAll(tree, "TopUpHistory")).toHaveLength(0);
     expect(findAll(tree, "InvoiceHistory")).toHaveLength(0);
-    expect(findAll(tree, "BillingLimitControl")).toHaveLength(0);
+    expect(findAll(tree, "AutoProvisionToggle")).toHaveLength(0);
   });
 
-  it("hides all three sections when billing_model is absent (older backend)", () => {
+  it("hides both sections when billing_model is absent (older backend)", () => {
     const state = paidCreditsState();
     delete state.entitlement.billing_model;
     const tree = renderShallow(CreditsBilling, {
@@ -349,8 +384,7 @@ describe("CreditsBilling top-up section gating", () => {
       state,
       appKey: "hubspot_line_item",
     });
-    expect(findAll(tree, "TopUpHistory")).toHaveLength(0);
     expect(findAll(tree, "InvoiceHistory")).toHaveLength(0);
-    expect(findAll(tree, "BillingLimitControl")).toHaveLength(0);
+    expect(findAll(tree, "AutoProvisionToggle")).toHaveLength(0);
   });
 });

@@ -1,6 +1,6 @@
 import React from "react";
 import { Flex, Tile, Text, ProgressBar, StatusTag, Alert } from "@hubspot/ui-extensions";
-import { daysUntil } from "../lib/format";
+import { daysUntil, fmtDate } from "../lib/format";
 import { resolveCreditMeter } from "../lib/creditDisplay";
 
 // THE credit-archetype activity tile + hero signal. For credit apps, "credits
@@ -40,8 +40,11 @@ import { resolveCreditMeter } from "../lib/creditDisplay";
 // Props:
 //   entitlement  — the /v1/home entitlement union (uses the credits arm).
 //   creditMeter  — the /v1/home credit_meter block (optional).
-export function CreditMeter({ entitlement, creditMeter }) {
-  const view = resolveCreditMeter(entitlement, creditMeter);
+//   credits      — the /v1/home credits block (optional; the authoritative
+//                  two-bucket monthly/additional numbers + renews_on when the
+//                  backend carries it — see CONTRACT.md).
+export function CreditMeter({ entitlement, creditMeter, credits = null }) {
+  const view = resolveCreditMeter(entitlement, creditMeter, credits);
   if (!view) return null;
 
   const { granted, used, remaining, bank, tagVariant, tagLabel, poolBarVariant, bankBarVariant, alert } = view;
@@ -63,32 +66,40 @@ export function CreditMeter({ entitlement, creditMeter }) {
                 Monthly plan credits: {bank.poolRemaining} of {bank.poolGrant}{" "}
                 left
               </Text>
+              {view.renewsOn && (
+                <Text variant="microcopy">Renews on {fmtDate(view.renewsOn)}</Text>
+              )}
               <ProgressBar
                 title={`${bank.poolUsed} of ${bank.poolGrant} used`}
                 value={bank.poolUsed}
                 maxValue={bank.poolGrant > 0 ? bank.poolGrant : 1}
                 showPercentage={true}
+                valueDescription={`${bank.poolUsed} of ${bank.poolGrant} used`}
                 variant={poolBarVariant}
               />
             </Flex>
-            {bank.bankGranted > 0 ? (
+            {/* The additional-credits line rides along only when the account
+                has (or ever bought) a bank — never "0 of 0 left". */}
+            {bank.showAdditional && (bank.bankGranted > 0 ? (
               // Bank — level gauge over the granted total (refills on
               // purchase, drains on spend; never expires).
               <Flex direction="column" gap="extra-small">
                 <Flex direction="row" gap="extra-small" align="center">
                   <Text>
-                    Additional credits (never expire): {bank.bankRemaining} of{" "}
+                    Additional credits: {bank.bankRemaining} of{" "}
                     {bank.bankGranted} left
                   </Text>
                   {bank.bankLow && (
                     <StatusTag variant="warning">Running low</StatusTag>
                   )}
                 </Flex>
+                <Text variant="microcopy">Does not expire</Text>
                 <ProgressBar
                   title={`${bank.bankRemaining} of ${bank.bankGranted} left`}
                   value={bank.bankRemaining}
                   maxValue={bank.bankGranted > 0 ? bank.bankGranted : 1}
                   showPercentage={true}
+                  valueDescription={`${bank.bankRemaining} of ${bank.bankGranted} left`}
                   variant={bankBarVariant}
                 />
               </Flex>
@@ -98,11 +109,9 @@ export function CreditMeter({ entitlement, creditMeter }) {
               // only, no bar (never divide by zero, never "of 0").
               <Flex direction="column" gap="extra-small">
                 <Text>Additional credits: {bank.bankRemaining} left</Text>
-                <Text format={{ fontStyle: "italic" }}>
-                  Additional credits don't expire.
-                </Text>
+                <Text variant="microcopy">Does not expire</Text>
               </Flex>
-            )}
+            ))}
           </>
         ) : (
           <>
@@ -115,6 +124,7 @@ export function CreditMeter({ entitlement, creditMeter }) {
               value={used}
               maxValue={granted > 0 ? granted : 1}
               showPercentage={true}
+              valueDescription={`${used} of ${granted} used`}
               variant={poolBarVariant}
             />
           </>
