@@ -82,7 +82,11 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // Replaces the old billing-limit concept. enabled = buy another pack
     // automatically when monthly credits run out; disabled = no purchase,
     // actions fail the entitlement gate at zero. Default true. A legacy
-    // disabled/zero billing limit maps to enabled=false on first read.
+    // disabled/zero billing limit maps to enabled=false on first read. A
+    // legacy POSITIVE billing_limit_cents was a spend CEILING, not an opt-out
+    // — it maps to enabled=true (UNCAPPED auto-buy; the cap concept is gone).
+    // ⚠ PENDING EXPLICIT SIGN-OFF: that positive-limit -> enabled=true mapping
+    // turns a capped spend into an uncapped one for those installs.
     "auto_provision": { "enabled": true },
     // Last CLOSED billing period vs current period-to-date, off the credit
     // ledger. null until the install has one full closed period.
@@ -102,6 +106,33 @@ contract serves all archetypes; components branch on `entitlement.mode`.
       "target_tier": null,            // e.g. "professional"
       "monthly_savings_usd": null,
       "topup_packs_this_period": 0
+    },
+    // FEATURE USAGE — base feat/home-feature-usage. Aggregates DEBIT credits
+    // off the credit ledger (all-time, newest-first, bounded) through the
+    // app's static feature registry. Drives the shared <FeatureUsage> Home
+    // sections ("Most used features" + "Recommended to explore").
+    //   most_used  — top 5 features by credits; {key, name, credits_or_events}.
+    //                The field name anticipates event-denominated features: a
+    //                row MAY carry unit ("credits" | "events"); absent =>
+    //                "credits" (what every current backend emits).
+    //   not_in_use — every DETECTABLE registry feature with zero observed
+    //                usage (features with no ledger signal are never claimed
+    //                "not in use"); {key, name, docs_url, rationale} —
+    //                docs_url/rationale may be null/"".
+    // DEGRADATION: the block is ABSENT on older backends, legacy installs,
+    // and apps with no feature registry — ui-shared renders NOTHING (never an
+    // empty box). A fresh install gets most_used: [] and the full detectable
+    // catalog in not_in_use.
+    "feature_usage": {
+      "most_used": [
+        { "key": "geocode_record", "name": "Geocode Records",
+          "credits_or_events": 42 }  // + optional "unit" hint (see above)
+      ],
+      "not_in_use": [
+        { "key": "nearby_lists", "name": "Nearby Lists",
+          "docs_url": "https://www.growth-operations.com/help-articles/geocoding-setup-guide",
+          "rationale": "Build static lists of the records nearest to any location." }
+      ]
     },
     // Health v2: "attention" (new — was only ever healthy/critical) when
     // unresolved error-level alerts spike (>2 in the trailing week) OR
@@ -236,7 +267,10 @@ the /v1/billing/*/start endpoints require. ui-shared passes the
   `{ "limit_cents": int | null }` — DEPRECATED (kept for older ui-shared
   versions). Superseded by auto-provision; the legacy field is no longer
   surfaced on the /home entitlement arm, and a legacy disabled/zero limit
-  maps to `auto_provision.enabled == false`.
+  maps to `auto_provision.enabled == false`. A legacy POSITIVE limit was a
+  spend ceiling, not an opt-out — it maps to `enabled == true` (uncapped
+  auto-buy; see state.auto_provision above — mapping PENDING EXPLICIT
+  SIGN-OFF).
 
 The old `GET .../billing/top-ups` purchase-history endpoint was REMOVED: the
 Billing tab's invoice history (`GET {billingBaseUrl}/v1/billing/invoices`)
