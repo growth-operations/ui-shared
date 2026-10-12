@@ -5,6 +5,7 @@ import { HealthHero } from "./HealthHero";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { SyncPulse } from "./SyncPulse";
 import { CreditMeter } from "./CreditMeter";
+import { FeatureUsage } from "./FeatureUsage";
 import { FeatureNudges } from "./FeatureNudges";
 import { HelpfulLinks } from "./HelpfulLinks";
 
@@ -69,6 +70,8 @@ function ArchetypeTile({ state }) {
 //   activated cockpit   -> <HealthHero>
 //                          + <OnboardingChecklist> (only if not complete)
 //                          + the archetype activity tile (sync/credit/pipeline)
+//                          + <FeatureUsage> (post-checklist; needs the
+//                            backend's state.feature_usage block)
 //                          + <FeatureNudges>
 //
 // Props:
@@ -124,6 +127,11 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
       )}
 
       <ArchetypeTile state={state} />
+
+      {/* Most used / recommended-to-explore (state.feature_usage) — renders
+          nothing on backends without the block or for legacy installs. Gated
+          on a finished checklist so a fresh install sees setup first. */}
+      {onboardingComplete && <FeatureUsage state={state} />}
 
       <FeatureNudges nudges={state.nudges} onNavigate={onNavigate} />
 
