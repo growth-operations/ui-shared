@@ -60,6 +60,13 @@ const LEVEL_VARIANT = {
   critical: "error",
 };
 
+// The level bubble is display copy — capitalize the backend's lowercase
+// level ("warning" -> "Warning").
+function capitalizeLevel(level) {
+  if (!level) return "";
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
 function DefaultAlertRow({
   context,
   alert,
@@ -86,7 +93,7 @@ function DefaultAlertRow({
     <TableRow>
       <TableCell>
         <Tag variant={LEVEL_VARIANT[alert.level] || "default"}>
-          {alert.level}
+          {capitalizeLevel(alert.level)}
         </Tag>
       </TableCell>
       <TableCell>
