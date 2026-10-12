@@ -77,18 +77,28 @@ export async function getInvoices({ billingBaseUrl, token } = {}) {
   return billingFetch(url, { method: "GET" });
 }
 
-// POST {billingBaseUrl}/v1/billing/auto-provision?token=..., body
+// POST /v1/hubspot/app_pages/{app}/billing/auto-provision, body
 // { enabled: bool } — set the account's auto-provision flag (REPLACES the old
 // billing-limit concept): enabled buys another pack of additional credits
 // when the monthly credits run out; disabled means no purchase and actions
 // start failing the entitlement gate.
 //
-// Same token-auth posture as getInvoices (the claim scopes the change to THIS
-// portal's account); BillingTab passes the interval-refreshed
-// state.billing_action_tokens.portal.
-export async function setAutoProvision({ billingBaseUrl, token, enabled } = {}) {
-  const url = `${billingBaseUrl}/v1/billing/auto-provision?token=${encodeURIComponent(token)}`;
-  return billingFetch(url, { method: "POST", body: { enabled: !!enabled } });
+// This route lives on the BASE service (same app_pages family as
+// billing/limit), NOT the GOAA billing service — there is no
+// /v1/billing/auto-provision there. Same callAppApi + ?token= posture as
+// setBillingLimit below: verify_hubspot plus the billing action token (the
+// claim scopes the change to THIS portal's account); BillingTab passes the
+// interval-refreshed state.billing_action_tokens.portal.
+export async function setAutoProvision(
+  context,
+  { appKey, portalId, enabled, token } = {}
+) {
+  return callAppApi(
+    context,
+    billingPath(appKey, "auto-provision", portalId, { token }),
+    "POST",
+    { enabled: !!enabled }
+  );
 }
 
 // POST /v1/hubspot/app_pages/{app}/billing/limit, body { limit_cents: int|null }

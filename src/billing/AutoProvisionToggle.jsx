@@ -20,23 +20,26 @@ import { setAutoProvision } from "../sdk/app/topUps";
 // panel (Andrew's exact copy + buttons) instead of saving on click; OFF→ON
 // saves immediately — no confirmation to turn protection back ON. The flow
 // itself is a unit-tested reducer (../lib/autoProvision); this component is
-// the wiring: controlled Toggle + the POST to the billing service's
-// /v1/billing/auto-provision.
+// the wiring: controlled Toggle + the POST to the base service's
+// /v1/hubspot/app_pages/{app}/billing/auto-provision (see setAutoProvision).
 //
 // Props:
+//   context            — the UI-extension serverless context
+//                        (context.portal.id).
+//   appKey             — the billing app_key for THIS app.
 //   enabled            — the resolved flag (resolveAutoProvision; true when
 //                        the state.auto_provision block is absent).
 //   appName            — display name templated into the copy.
-//   billingBaseUrl     — state.billing_base_url.
 //   billingActionToken — the (interval-refreshed)
 //                        state.billing_action_tokens.portal. Without it the
 //                        toggle stays read-only — the same "hidden/disabled
 //                        until token exists" posture as the other billing
 //                        controls.
 export function AutoProvisionToggle({
+  context,
+  appKey,
   enabled: enabledProp,
   appName = "this app",
-  billingBaseUrl = null,
   billingActionToken = null,
 }) {
   const [enabled, setEnabled] = useState(enabledProp !== false);
@@ -48,13 +51,14 @@ export function AutoProvisionToggle({
     setEnabled(enabledProp !== false);
   }, [enabledProp]);
 
-  const ready = !!billingBaseUrl && !!billingActionToken;
+  const ready = !!billingActionToken;
   const busy = ui.phase === "saving";
 
   const save = async (next) => {
     try {
-      await setAutoProvision({
-        billingBaseUrl,
+      await setAutoProvision(context, {
+        appKey,
+        portalId: context?.portal?.id,
         token: billingActionToken,
         enabled: next,
       });
