@@ -24,6 +24,7 @@ describe("package exports", () => {
     for (const name of [
       "AppHome",
       "CreditMeter",
+      "FeatureUsage",
       "BillingTab",
       "BillingBanner",
       "PlanGrid",
@@ -31,5 +32,7 @@ describe("package exports", () => {
     ]) {
       expect(typeof root[name], name).toBe("function");
     }
+    expect(typeof root.resolveFeatureUsage).toBe("function");
+    expect(typeof root.featureUsageOf).toBe("function");
   });
 });

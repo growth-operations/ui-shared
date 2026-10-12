@@ -5,6 +5,7 @@ import { HealthHero } from "./HealthHero";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { SyncPulse } from "./SyncPulse";
 import { CreditMeter } from "./CreditMeter";
+import { FeatureUsage } from "./FeatureUsage";
 import { FeatureNudges } from "./FeatureNudges";
 import { HelpfulLinks } from "./HelpfulLinks";
 
@@ -69,6 +70,9 @@ function ArchetypeTile({ state }) {
 //   activated cockpit   -> <HealthHero>
 //                          + <OnboardingChecklist> (only if not complete)
 //                          + the archetype activity tile (sync/credit/pipeline)
+//                          + <FeatureUsage> (once the non-billing setup steps
+//                            are done; needs the backend's state.feature_usage
+//                            block)
 //                          + <FeatureNudges>
 //
 // Props:
@@ -111,6 +115,20 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
 
   const onboardingComplete = state.onboarding?.complete === true;
 
+  // FeatureUsage gate: render once every NON-BILLING onboarding step is done.
+  // Every registry app marks its Choose-a-plan step paid-gated (key "plan",
+  // routing to /billing, done only once the subscription is ACTIVE), so gating
+  // on onboarding.complete would hide these sections from free/trial installs
+  // forever — exactly the audience "Recommended to explore" is for. A fresh
+  // install still has its install/workflow steps open, so setup comes first.
+  // With no step model (older backends), fall back to the block-level flag.
+  const isBillingStep = (s) => s?.key === "plan" || s?.cta_route === "/billing";
+  const onboardingSteps = state.onboarding?.steps;
+  const setupStepsComplete =
+    Array.isArray(onboardingSteps) && onboardingSteps.length > 0
+      ? onboardingSteps.every((s) => s.done === true || isBillingStep(s))
+      : onboardingComplete;
+
   return (
     <Flex direction="column" gap="medium">
       {/* A completed-with-warnings activation still surfaces its warnings
@@ -124,6 +142,13 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
       )}
 
       <ArchetypeTile state={state} />
+
+      {/* Most used / recommended-to-explore (state.feature_usage) — renders
+          nothing on backends without the block or for legacy installs. Gated
+          on the non-billing setup steps (NOT the paid-gated plan step) so a
+          fresh install sees setup first but free/trial installs aren't
+          locked out. */}
+      {setupStepsComplete && <FeatureUsage state={state} />}
 
       <FeatureNudges nudges={state.nudges} onNavigate={onNavigate} />
 

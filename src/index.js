@@ -11,6 +11,7 @@ export { HealthHero } from "./home/HealthHero";
 export { OnboardingChecklist } from "./home/OnboardingChecklist";
 export { SyncPulse } from "./home/SyncPulse";
 export { FeatureNudges } from "./home/FeatureNudges";
+export { FeatureUsage } from "./home/FeatureUsage";
 export { CreditMeter } from "./home/CreditMeter";
 export { HelpfulLinks } from "./home/HelpfulLinks";
 
@@ -44,6 +45,7 @@ export {
   STATUS_VARIANT,
 } from "./lib/format";
 export { useStrictModeEffect } from "./lib/useStrictModeEffect";
+export { resolveFeatureUsage, featureUsageOf } from "./lib/featureUsage";
 export {
   hasTopUpBank,
   resolveCreditMeter,
