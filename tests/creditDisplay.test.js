@@ -523,6 +523,129 @@ describe("resolveBillingBanner", () => {
       cta: { kind: "billing", label: "Go to Billing →" },
     });
   });
+
+  // --- Trial states (consolidated from the retired Home TrialBanner,
+  // Andrew 2026-10-13): ONE top banner — blockers RED, trial-active YELLOW,
+  // copy verbatim, "Need help?" footer rides along. ---
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const isoFromNow = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
+  const onTrial = (over = {}) =>
+    legacyFree({ grant_expires_at: isoFromNow(12), ...over });
+
+  it("trial active -> YELLOW countdown at the top, with the footer + Billing CTA", () => {
+    const banner = resolveBillingBanner(onTrial(), { appName: "Test App" });
+    expect(banner.variant).toBe("warning");
+    expect(banner.title).toBe("12 trial days remaining");
+    expect(banner.message).toBe(
+      "You have 12 days remaining in your trial period. Select a plan to continue use of Test App."
+    );
+    expect(banner.footer).toBe("Need help? info@growthoperationsco.com");
+    expect(banner.cta).toEqual({ kind: "billing", label: "Go to Billing →" });
+  });
+
+  it("trial ended -> RED (it stops the app), copy verbatim from the retired banner", () => {
+    const banner = resolveBillingBanner(
+      onTrial({ grant_expires_at: isoFromNow(-2) }),
+      { appName: "Test App" }
+    );
+    expect(banner.variant).toBe("error");
+    expect(banner.title).toBe("Your trial has ended");
+    expect(banner.message).toBe(
+      "Your free trial has ended. Select a plan to continue use of Test App."
+    );
+    expect(banner.footer).toBe("Need help? info@growthoperationsco.com");
+    expect(banner.cta).toEqual({ kind: "billing", label: "Go to Billing →" });
+  });
+
+  it("trial ended BEATS running-low (a blocker outranks a nudge)", () => {
+    // Clock ran out yesterday AND the remaining credits are under the low
+    // threshold — the red trial-ended banner must win over the yellow nudge.
+    const banner = resolveBillingBanner(
+      onTrial({ grant_expires_at: isoFromNow(-1), remaining: 8, used: 92 })
+    );
+    expect(banner.variant).toBe("error");
+    expect(banner.title).toBe("Your trial has ended");
+  });
+
+  it("a lapsed clock explains a legacy entitled=false (trial ended, credits left)", () => {
+    // Grant expired -> the backend reads entitled=false with credits left.
+    // The legacy fallback would call that "out of credits"; the trial-ended
+    // banner (same RED severity, accurate copy) wins instead.
+    const banner = resolveBillingBanner(
+      onTrial({ grant_expires_at: isoFromNow(-3), entitled: false }),
+      { appName: "Test App" }
+    );
+    expect(banner.variant).toBe("error");
+    expect(banner.title).toBe("Your trial has ended");
+  });
+
+  it("out of credits WITH explicit signals keeps the existing byte-identical copy", () => {
+    // depleted flag set + days left on the clock: the pre-existing banner
+    // branch fires first (out of credits beats the clock), trial copy does
+    // NOT replace it.
+    const banner = resolveBillingBanner(
+      onTrial({ used: 100, remaining: 0, depleted: true, entitled: false }),
+      { actionLabel: "going", appName: "Test App" }
+    );
+    expect(banner).toEqual({
+      variant: "error",
+      title: "You're out of credits",
+      message: "Your credits are used up. Choose a plan in Billing to keep going.",
+      cta: { kind: "billing", label: "Go to Billing →" },
+    });
+  });
+
+  it("out of credits WITHOUT any flag -> RED, retired-banner catch-all copy", () => {
+    // remaining <= 0 with no depleted flag / entitled still true: the trial
+    // resolver's catch-all keeps the account RED instead of falling through.
+    const banner = resolveBillingBanner(
+      onTrial({ used: 100, remaining: 0 }),
+      { appName: "Test App" }
+    );
+    expect(banner.variant).toBe("error");
+    expect(banner.title).toBe("You're out of credits");
+    expect(banner.message).toBe(
+      "You have used 100/100 free credits. Select one of the plans below to continue use of Test App."
+    );
+    expect(banner.footer).toBe("Need help? info@growthoperationsco.com");
+  });
+
+  it("running-low BEATS the trial countdown (the more urgent yellow wins)", () => {
+    const banner = resolveBillingBanner(onTrial({ remaining: 8, used: 92 }), {
+      actionsNoun: "task actions",
+    });
+    expect(banner.variant).toBe("warning");
+    expect(banner.title).toBe("Running low on credits");
+  });
+
+  it("paid plans never see trial states (a paid plan is past the trial)", () => {
+    expect(
+      resolveBillingBanner(meteredPaid({ grant_expires_at: isoFromNow(12) }))
+    ).toBe(null);
+    expect(
+      resolveBillingBanner(
+        meteredPaid({ grant_expires_at: isoFromNow(-2), remaining: 0 })
+      )
+    ).toBe(null);
+  });
+
+  it("a free grant with NO clock and healthy credits renders nothing", () => {
+    expect(resolveBillingBanner(legacyFree())).toBe(null);
+  });
+
+  it("trial copy falls back to 'this app' without a display name", () => {
+    const banner = resolveBillingBanner(onTrial());
+    expect(banner.message).toContain("continue use of this app.");
+  });
+
+  it("top_up_failed still outranks every trial state (payment failed is the story)", () => {
+    const banner = resolveBillingBanner(
+      topupWithBank({ threshold_state: "top_up_failed", plan: null })
+    );
+    expect(banner.variant).toBe("error");
+    expect(banner.title).toBe("We couldn't add credits");
+  });
 });
 
 // --- parseLimitInput --------------------------------------------------------

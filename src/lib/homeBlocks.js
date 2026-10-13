@@ -1,71 +1,16 @@
 // Pure resolvers for the Home cockpit blocks added for Andrew's 2026-10
-// App Home feedback: the trial banner (three states), the plan-fit signal,
-// and the period-over-period credit comparison. Framework-free (no React) so
-// the branch math is unit-testable; the components in ../home stay thin.
+// App Home feedback: the plan-fit signal and the period-over-period credit
+// comparison. Framework-free (no React) so the branch math is unit-testable;
+// the components in ../home stay thin.
+//
+// (The trial banner used to live here. Andrew 2026-10-13: ONE banner at the
+// top of every page — the trial states moved into resolveBillingBanner in
+// ./creditDisplay, copy verbatim, and the Home-mounted <TrialBanner> is
+// retired.)
 //
 // Everything here degrades gracefully: every block is additive on the
 // /v1/home payload, and a resolver returns null (render nothing) whenever
 // the fields it needs are absent.
-import { daysUntil } from "./format";
-
-// --- Trial banner ----------------------------------------------------------
-
-// Rides under every trial banner (Andrew's exact copy).
-export const TRIAL_BANNER_FOOTER = "Need help? info@growthoperationsco.com";
-
-// Resolve the Home trial banner from the credits entitlement arm.
-// Returns null (render nothing) for non-credits modes, paid plans (the trial
-// is over), pre-install, or a backend that carries no grant clock. Otherwise
-// { variant, title, body, footer } — copy verbatim from Andrew, with the app
-// display name templated in.
-//
-// State selection (first match wins):
-//   out of credits  — the free grant is spent (depleted / remaining <= 0).
-//                     Beats the clock: a burned-through grant is "out of
-//                     credits" even with days left.
-//   trial ended     — the grant's 30-day clock ran out with credits left.
-//   trial active    — the clock is still running: "[XX] trial days remaining".
-export function resolveTrialBanner(entitlement, { appName } = {}) {
-  const ent = entitlement;
-  if (!ent || ent.mode !== "credits") return null;
-  if (ent.plan) return null; // a paid plan is past the trial
-  if (ent.status === "not_installed") return null;
-  const name = appName ?? "this app";
-
-  const granted = ent.granted ?? 0;
-  const used = ent.used ?? 0;
-  const remaining = ent.remaining ?? Math.max(granted - used, 0);
-  const daysLeft =
-    ent.grant_expires_at != null ? daysUntil(ent.grant_expires_at) : null;
-
-  if (ent.depleted === true || remaining <= 0) {
-    return {
-      variant: "error",
-      title: "You're out of credits",
-      body: `You have used ${used}/${granted} free credits. Select one of the plans below to continue use of ${name}.`,
-      footer: TRIAL_BANNER_FOOTER,
-    };
-  }
-  if (daysLeft != null && daysLeft <= 0) {
-    return {
-      variant: "warning",
-      title: "Your trial has ended",
-      body: `Your free trial has ended. Select a plan to continue use of ${name}.`,
-      footer: TRIAL_BANNER_FOOTER,
-    };
-  }
-  if (daysLeft != null) {
-    return {
-      variant: "info",
-      title: `${daysLeft} trial days remaining`,
-      body: `You have ${daysLeft} days remaining in your trial period. Select a plan to continue use of ${name}.`,
-      footer: TRIAL_BANNER_FOOTER,
-    };
-  }
-  // No grant clock on record (a backend that predates grant_expires_at) —
-  // nothing to count down, so no banner.
-  return null;
-}
 
 // --- Plan fit ---------------------------------------------------------------
 

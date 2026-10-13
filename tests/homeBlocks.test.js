@@ -1,100 +1,17 @@
 // Unit tests for the Home cockpit block resolvers added for Andrew's
-// 2026-10 App Home feedback: the trial banner (three states), the plan-fit
-// signal, and the period-over-period comparison. Pure functions — no React.
+// 2026-10 App Home feedback: the plan-fit signal and the period-over-period
+// comparison. Pure functions — no React.
+//
+// (The trial banner resolver used to be tested here. Andrew 2026-10-13: the
+// trial states consolidated into the top BillingBanner — see the
+// resolveBillingBanner trial tests in creditDisplay.test.js.)
 import { describe, it, expect } from "vitest";
 import {
-  TRIAL_BANNER_FOOTER,
-  resolveTrialBanner,
   resolvePlanFit,
   planFitOf,
   resolvePeriodComparison,
   periodComparisonOf,
 } from "../src/lib/homeBlocks";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const isoFromNow = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
-
-// A credits-arm entitlement on the free grant (no plan).
-const freeGrant = (over = {}) => ({
-  mode: "credits",
-  entitled: true,
-  granted: 100,
-  used: 10,
-  remaining: 90,
-  grant_expires_at: isoFromNow(12),
-  ...over,
-});
-
-describe("resolveTrialBanner", () => {
-  it("renders nothing for paid plans, non-credits modes, and pre-install", () => {
-    expect(resolveTrialBanner(freeGrant({ plan: "starter" }))).toBe(null);
-    expect(resolveTrialBanner({ mode: "legacy" })).toBe(null);
-    expect(
-      resolveTrialBanner(freeGrant({ status: "not_installed" }))
-    ).toBe(null);
-    expect(resolveTrialBanner(null)).toBe(null);
-  });
-
-  it("trial active — the countdown state with the footer line", () => {
-    const banner = resolveTrialBanner(freeGrant(), { appName: "Test App" });
-    expect(banner.variant).toBe("info");
-    expect(banner.title).toBe("12 trial days remaining");
-    expect(banner.body).toBe(
-      "You have 12 days remaining in your trial period. Select a plan to continue use of Test App."
-    );
-    expect(banner.footer).toBe(TRIAL_BANNER_FOOTER);
-    expect(banner.footer).toBe("Need help? info@growthoperationsco.com");
-  });
-
-  it("trial ended — the clock ran out with credits left", () => {
-    const banner = resolveTrialBanner(
-      freeGrant({ grant_expires_at: isoFromNow(-2) }),
-      { appName: "Test App" }
-    );
-    expect(banner.variant).toBe("warning");
-    expect(banner.title).toBe("Your trial has ended");
-    expect(banner.body).toBe(
-      "Your free trial has ended. Select a plan to continue use of Test App."
-    );
-  });
-
-  it("out of credits — the grant is spent", () => {
-    const banner = resolveTrialBanner(
-      freeGrant({ used: 100, remaining: 0, depleted: true }),
-      { appName: "Test App" }
-    );
-    expect(banner.variant).toBe("error");
-    expect(banner.title).toBe("You're out of credits");
-    expect(banner.body).toBe(
-      "You have used 100/100 free credits. Select one of the plans below to continue use of Test App."
-    );
-  });
-
-  it("out of credits BEATS the clock — spent grant with days left is not 'active'", () => {
-    const banner = resolveTrialBanner(
-      freeGrant({
-        used: 100,
-        remaining: 0,
-        depleted: true,
-        grant_expires_at: isoFromNow(20), // plenty of clock left
-      }),
-      { appName: "Test App" }
-    );
-    expect(banner.title).toBe("You're out of credits");
-    expect(banner.variant).toBe("error");
-  });
-
-  it("renders nothing when the backend carries no grant clock", () => {
-    const noClock = freeGrant();
-    delete noClock.grant_expires_at;
-    expect(resolveTrialBanner(noClock, { appName: "Test App" })).toBe(null);
-  });
-
-  it("falls back to 'this app' without a display name", () => {
-    const banner = resolveTrialBanner(freeGrant());
-    expect(banner.body).toContain("continue use of this app.");
-  });
-});
 
 describe("resolvePlanFit", () => {
   it("returns null when the block is absent or the verdict is unknown", () => {

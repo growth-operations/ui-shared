@@ -5,7 +5,6 @@ import { HealthHero } from "./HealthHero";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { SyncPulse } from "./SyncPulse";
 import { FeatureUsage } from "./FeatureUsage";
-import { TrialBanner } from "./TrialBanner";
 import { PlanFitBanner } from "./PlanFitBanner";
 import { PeriodComparison } from "./PeriodComparison";
 import { FeatureNudges } from "./FeatureNudges";
@@ -49,8 +48,9 @@ function PipelineTile({ pipeline }) {
 // Picks the single archetype activity tile (CONTRACT: at most ONE present).
 // sync_pulse -> SyncPulse; pipeline -> PipelineTile. The credit meter is
 // deliberately NOT on Home anymore (Andrew's 2026-10 feedback) — it lives at
-// the top of the Usage tab; Home's credit story is the trial banner plus the
-// post-checklist period comparison. Renders nothing when no tile applies.
+// the top of the Usage tab; Home's credit story is the top BillingBanner's
+// trial states plus the post-checklist period comparison. Renders nothing
+// when no tile applies.
 function ArchetypeTile({ state }) {
   if (state.sync_pulse) return <SyncPulse syncPulse={state.sync_pulse} />;
   if (state.pipeline) return <PipelineTile pipeline={state.pipeline} />;
@@ -63,8 +63,7 @@ function ArchetypeTile({ state }) {
 // Lifecycle composition:
 //   no state            -> LoadingSpinner (still fetching /v1/home)
 //   activation pending  -> <InstallProgress> (install isn't finished yet)
-//   activated cockpit   -> <TrialBanner> (credit apps on the free grant)
-//                          + <HealthHero> (+ "...on the right plan" when
+//   activated cockpit   -> <HealthHero> (+ "...on the right plan" when
 //                            plan_fit says so)
 //                          + <PlanFitBanner> (upgrade_recommended only)
 //                          + <OnboardingChecklist> (only if not complete)
@@ -136,10 +135,9 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
           callout above the cockpit; InstallProgress renders null when clean. */}
       <InstallProgress state={state} onRetry={onRetry} />
 
-      {/* Trial states (active countdown / ended / out of credits) fly above
-          the hero — they're the strongest call to action a free account
-          has. Renders null for paid plans and non-credits modes. */}
-      <TrialBanner state={state} appName={appName} />
+      {/* No Home trial banner anymore — Andrew 2026-10-13: trial states (and
+          every other app-stopping billing condition) fly in the ONE top
+          <BillingBanner> the app layout mounts above every route. */}
 
       <HealthHero appName={appName} state={state} />
 

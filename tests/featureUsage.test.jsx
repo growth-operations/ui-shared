@@ -237,6 +237,31 @@ describe("AppHome + FeatureUsage", () => {
     expect(nodes[0].state).toBe(payload);
   });
 
+  it("mounts NO Home trial banner anymore — trial states fly in the top BillingBanner", () => {
+    // Andrew 2026-10-13 consolidation: even with an active free trial in the
+    // payload (previously the exact case that rendered <TrialBanner> above the
+    // hero), Home mounts nothing — the one banner lives in the app layout.
+    const tree = shallowResolve(
+      AppHome({
+        state: cockpit({
+          entitlement: {
+            mode: "credits",
+            entitled: true,
+            granted: 100,
+            used: 10,
+            remaining: 90,
+            grant_expires_at: new Date(
+              Date.now() + 12 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          },
+        }),
+      })
+    );
+    expect(findAll(tree, "TrialBanner")).toHaveLength(0);
+    // …and the cockpit still renders around it.
+    expect(findAll(tree, "HealthHero")).toHaveLength(1);
+  });
+
   it("stays hidden while a non-billing setup step is unfinished, even with the block", () => {
     const tree = shallowResolve(
       AppHome({

@@ -14,7 +14,6 @@ export { FeatureNudges } from "./home/FeatureNudges";
 export { FeatureUsage } from "./home/FeatureUsage";
 export { CreditMeter } from "./home/CreditMeter";
 export { HelpfulLinks } from "./home/HelpfulLinks";
-export { TrialBanner } from "./home/TrialBanner";
 export { PlanFitBanner } from "./home/PlanFitBanner";
 export { PeriodComparison } from "./home/PeriodComparison";
 export { UsageHighlights } from "./home/UsageHighlights";
@@ -48,6 +47,7 @@ export {
   statusVariant,
   STATUS_LABELS,
   STATUS_VARIANT,
+  SUPPORT_FOOTER,
 } from "./lib/format";
 export { useStrictModeEffect } from "./lib/useStrictModeEffect";
 export { resolveFeatureUsage, featureUsageOf } from "./lib/featureUsage";
@@ -59,8 +59,6 @@ export {
   parseLimitInput,
 } from "./lib/creditDisplay";
 export {
-  TRIAL_BANNER_FOOTER,
-  resolveTrialBanner,
   resolvePlanFit,
   planFitOf,
   resolvePeriodComparison,
