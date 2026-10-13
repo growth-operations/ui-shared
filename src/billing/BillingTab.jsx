@@ -16,7 +16,7 @@ import {
   TableRow,
   TableCell,
 } from "@hubspot/ui-extensions";
-import { fmtDate, fmtMoney, daysUntil } from "../lib/format";
+import { fmtDate, fmtMoney, daysUntil, SUPPORT_FOOTER } from "../lib/format";
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { CreditMeter } from "../home/CreditMeter";
 import { PlanGrid } from "./PlanGrid";
@@ -82,7 +82,14 @@ function useRefreshedBillingActionTokens(billingBaseUrl, initialTokens) {
 // Color-coded account-status panel (per Andrew's billing feedback): trial =>
 // yellow + days left + end date; active => green + next renewal; past_due =>
 // red + warning. Replaces the low-value flat-rate invoice chart.
-function StatusPanel({ entitlement }) {
+//
+// plansAvailable / restartAvailable describe what the canceled customer can
+// actually SEE below the panel (exported for tests). When a catalog gap
+// leaves plans EMPTY (2026-10-13 sparkfly incident) the "below" copy would
+// promise a grid that isn't there — so it swaps to copy that matches the
+// standalone restart button (or, without a restart token, the Stripe link
+// above), plus the support footer the dead end needs.
+export function StatusPanel({ entitlement, plansAvailable = true, restartAvailable = false }) {
   if (!entitlement) return null;
   const {
     status,
@@ -207,8 +214,15 @@ function StatusPanel({ entitlement }) {
   }
 
   if (status === "canceled") {
-    const resumeCta =
-      mode === "credits"
+    // plansAvailable === false means the catalog mirror came back EMPTY — no
+    // grid renders below, so the copy must not say "below". With a restart
+    // token the standalone one-click restart button (rendered under this
+    // panel) is the recovery path; without one, the Stripe link above is.
+    const resumeCta = !plansAvailable
+      ? restartAvailable
+        ? "Restart your previous plan in one click — we charge your card on file and your data starts syncing again."
+        : "Manage your billing in Stripe with the link above to resume — your data starts syncing again."
+      : mode === "credits"
         ? "Choose a plan below to start a new subscription."
         : "Restart your previous plan below in one click, or choose a different one — either way your data starts syncing again.";
     return (
@@ -216,6 +230,9 @@ function StatusPanel({ entitlement }) {
         <Flex direction="column" gap="extra-small">
           <Text format={{ fontWeight: "bold" }}>Your subscription was canceled</Text>
           <Text>{resumeCta}</Text>
+          {!plansAvailable && (
+            <Text variant="microcopy">{SUPPORT_FOOTER}</Text>
+          )}
         </Flex>
       </Alert>
     );
@@ -228,7 +245,8 @@ function StatusPanel({ entitlement }) {
   );
 }
 
-function TrialSubscriptionBilling({ context, state, appKey, openIframe = null }) {
+// Exported for tests (the canceled/empty-catalog restart fallback).
+export function TrialSubscriptionBilling({ context, state, appKey, openIframe = null }) {
   const ent = state?.entitlement;
 
   // Install not provisioned with a Stripe customer yet — calm "finish setup"
@@ -316,6 +334,21 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
     (isTrialing && currentOrder != null && plans.length > 0) ||
     (needsCheckout && plans.length > 0);
 
+  // Empty-catalog restart fallback (2026-10-13 sparkfly incident): a catalog
+  // data gap can leave `plans` EMPTY for a canceled account — showPicker then
+  // hides the grid while the panel copy still promised one. With no grid to
+  // pick from, the one-click restart becomes THE recovery path: a standalone
+  // primary button hitting /v1/billing/restart/start with NO price_id (the
+  // billing service resolves the account's last subscription price
+  // server-side). Requires the restart action token; legacy/Anvil-mode
+  // entitlements are excluded defensively (BillingTab's mode switch already
+  // routes mode "legacy" to LegacyBilling, so this arm is unreachable for
+  // them — the guard keeps it that way if the switch ever changes).
+  const standaloneRestartUrl =
+    isCanceled && plans.length === 0 && ent.mode !== "legacy"
+      ? keepSubscriptionUrl
+      : null;
+
   return (
     <Flex direction="column" gap="medium">
       {/* PRIMARY CTA when there's an existing subscription to manage
@@ -331,7 +364,11 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
         {portalStartUrl ? "Manage billing in Stripe" : "Preparing billing…"}
       </LoadingButton>
 
-      <StatusPanel entitlement={state?.entitlement} />
+      <StatusPanel
+        entitlement={state?.entitlement}
+        plansAvailable={!needsCheckout || plans.length > 0}
+        restartAvailable={standaloneRestartUrl != null}
+      />
 
       {/* Scheduled-cancel on an ACTIVE sub: one click flips
           cancel_at_period_end off in place (no re-checkout, no new sub) —
@@ -343,9 +380,23 @@ function TrialSubscriptionBilling({ context, state, appKey, openIframe = null })
         </Button>
       )}
 
+      {/* CANCELED with an EMPTY catalog (no grid to pick from): the
+          price_id-less one-click restart is the recovery path, rendered
+          under the status panel. Reuses keepSubscriptionUrl — the restart
+          endpoint never needed a price_id client-side. */}
+      {standaloneRestartUrl && (
+        <Button href={{ url: standaloneRestartUrl, external: true }} variant="primary">
+          Restart your previous plan
+        </Button>
+      )}
+
       <Text format={{ fontStyle: "italic" }}>
         {needsCheckout
-          ? "Choose a plan below to resume. Once you have an active subscription, use the link above to manage payment methods or view invoices."
+          ? isCanceled && plans.length === 0
+            ? standaloneRestartUrl
+              ? "Restart charges your card on file and resumes syncing immediately — no checkout page. Once you have an active subscription, use the link above to manage payment methods or view invoices."
+              : "Once you have an active subscription, use the link above to manage payment methods or view invoices."
+            : "Choose a plan below to resume. Once you have an active subscription, use the link above to manage payment methods or view invoices."
           : "Billing is managed in Stripe across all Growth Operations apps. Use the link above to update your plan, payment method, or view invoices."}
       </Text>
 

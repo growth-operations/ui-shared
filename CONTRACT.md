@@ -182,6 +182,14 @@ contract serves all archetypes; components branch on `entitlement.mode`.
   // tier the account is on (free grant => no current paid tier). Absent for
   // non-credit apps. talk_to_sales tiers (enterprise) hide price + checkout and
   // show a contact CTA instead.
+  // EMPTY-CATALOG FALLBACK (2026-10-13 sparkfly incident): a catalog gap can
+  // leave plans: [] for a CANCELED trial_subscription account — BillingTab
+  // then hides the grid and instead renders a standalone "Restart your
+  // previous plan" button hitting GET {billing_base_url}/v1/billing/restart/start
+  // with NO price_id (the billing service resolves the account's last
+  // subscription price server-side), gated on billing_action_tokens.restart.
+  // Backends that predate the restart token render no button; the Stripe
+  // portal link above the panel is the fallback path.
   "plans": [
     { "tier": "free", "name": "Free", "tier_order": 0, "credits_per_period": 100,
       "features": ["100 credits/mo", "Community support"], "talk_to_sales": false,
