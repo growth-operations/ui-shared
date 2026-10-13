@@ -19,6 +19,11 @@ import { resolveBillingBanner } from "../lib/creditDisplay";
 //                     successful top-up): actions are paused until the next
 //                     billing period or a successful top-up.
 //
+// Andrew 2026-10-13 (banner consolidation): this is the ONE banner — the
+// free-grant trial states (out of credits / trial ended -> RED, trial active
+// -> YELLOW, with the "Need help?" footer) fly HERE on every page; the
+// separate Home-mounted TrialBanner is retired. Copy reused verbatim from it.
+//
 // Legacy metered accounts are unchanged: they only ever see threshold_state
 // "healthy"/"depleted" with over_included doing the talking — overage is
 // "paying overage, not blocked" (the 2026-09-02 incident: a paid account
@@ -35,6 +40,8 @@ import { resolveBillingBanner } from "../lib/creditDisplay";
 //   actionsNoun — short noun phrase for the running-low / paused messages,
 //                 e.g. "file actions" / "task actions". Falls back to
 //                 "actions".
+//   appName     — display name override for the trial-state copy; defaults to
+//                 state.app.name, then "this app".
 //   onNavigate  — in-app PageLink-equivalent callback (the host owns the
 //                 router — see ui-shared's OnboardingChecklist for the same
 //                 pattern). Renders the in-app Billing CTA when provided;
@@ -49,10 +56,11 @@ import { resolveBillingBanner } from "../lib/creditDisplay";
 //                 and the external portal CTA (kind "portal") is NOT
 //                 suppressed. Omitting the prop keeps the legacy behavior
 //                 (button always rendered), so non-updated hosts don't break.
-export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, context, currentPath }) {
+export function BillingBanner({ state, actionLabel, actionsNoun, appName, onNavigate, context, currentPath }) {
   const banner = resolveBillingBanner(state?.entitlement, {
     actionLabel,
     actionsNoun,
+    appName: appName ?? state?.app?.name,
   });
   if (!banner) return null;
 
@@ -88,6 +96,9 @@ export function BillingBanner({ state, actionLabel, actionsNoun, onNavigate, con
     <Alert title={banner.title} variant={banner.variant}>
       <Flex direction="column" gap="extra-small">
         <Text>{banner.message}</Text>
+        {/* The support footer line rides the trial-state banners (the same
+            microcopy the retired Home TrialBanner rendered). */}
+        {banner.footer && <Text variant="microcopy">{banner.footer}</Text>}
         {banner.cta?.kind === "portal" && portalStartUrl ? (
           <Button
             variant="secondary"

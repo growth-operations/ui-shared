@@ -1,6 +1,12 @@
 // Shared formatting + status helpers for Growth Operations app UIs.
 // Framework-agnostic (no React) so they can be unit-reasoned and reused.
 
+// The support footer line shared by customer-facing dead-end/urgency surfaces
+// (the top billing banner's trial states, the Billing tab's empty-catalog
+// canceled panel). Formerly TRIAL_BANNER_FOOTER on the retired Home
+// TrialBanner — promoted here once a second surface needed it.
+export const SUPPORT_FOOTER = "Need help? info@growthoperationsco.com";
+
 // ISO datetime string (or ms epoch) -> "Mon DD, YYYY", null-safe.
 // new Date(NaN).toLocaleDateString() would throw, so guard it.
 export function fmtDate(value) {

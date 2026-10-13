@@ -217,6 +217,36 @@ in @hubspot/ui-extensions (it's in the pages `actions` object, present since
 Use `cta_url` (external/full deep link) only for genuinely external targets
 (e.g. the settings extension deep link), which render as an external `Link`.
 
+## Top banner (BillingBanner) — the ONE banner
+
+Andrew 2026-10-13: a single banner at the top of EVERY page (mounted by the
+app's layout, resolver `resolveBillingBanner`, credits arm only). Any condition
+that STOPS the app flies RED (`variant: "error"`); "trial period active" flies
+YELLOW (`variant: "warning"`). The separate Home-mounted `<TrialBanner>` is
+retired — its (product-owner-approved) copy is reused verbatim, with the
+`Need help? info@growthoperationsco.com` footer riding as microcopy.
+
+Precedence (first match wins):
+
+1. `threshold_state: "top_up_pending"` — info, no CTA
+2. `threshold_state: "top_up_failed"` — RED, "Update payment method" portal CTA
+3. `threshold_state: "limit_reached"` — warning, Billing CTA
+4. out of credits WITH explicit signals (`threshold_state: "depleted"`, legacy
+   `depleted`/`entitled: false`) — RED, pre-existing blocking copy
+5. out of credits WITHOUT explicit signals (free grant, `remaining <= 0`) —
+   RED, retired-TrialBanner copy
+6. trial ended (`grant_expires_at` in the past, credits left, no plan) — RED,
+   retired-TrialBanner copy. A lapsed clock explains a legacy `entitled:
+   false` reading better than "out of credits", so this wins over that one
+   legacy signal (never over an explicit depleted flag / threshold_state).
+7. `over_included` (paid metered overage) — warning, never blocking
+8. running low (free grant, `remaining <= low_threshold`) — warning
+9. trial active (`grant_expires_at` in the future, no plan) — YELLOW countdown;
+   yields only to running-low (the more urgent of the two yellow states)
+
+Trial states require the credits arm, no paid plan (`plan == null`), and an
+emitted `grant_expires_at`; paid/healthy accounts render no banner.
+
 ## Rules
 - `entitlement.entitled` is the ONLY gate the UI/feature checks read. Backend computes it
   (trial: is_entitled status; credits: remaining > 0).

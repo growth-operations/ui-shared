@@ -25,6 +25,7 @@
 //   double-guards so a stale/mixed payload can't regress the 2026-09-02
 //   incident where a paying, overage account was shown a blocking
 //   "Depleted"/"out of credits" panel).
+import { daysUntil, SUPPORT_FOOTER } from "./format";
 
 // True when the account has (or ever had) a top-up bank. Note the CreditMeter
 // bank section renders only while the bank HAS credits left (bankRemaining >
@@ -311,9 +312,77 @@ export function resolveCreditMeter(entitlement, creditMeter, credits = null) {
   };
 }
 
+// --- Free-grant trial states (consolidated into the TOP banner) ------------
+
+// Andrew 2026-10-13: ONE banner at the top of every page. Anything that STOPS
+// the app — out of credits, trial ended, payment failed — flies RED in the
+// top BillingBanner; "trial active" flies YELLOW there too. The separate
+// Home-mounted TrialBanner is retired; its copy (approved by the product
+// owner) is reused VERBATIM here — only the placement and the trial-ended
+// variant (warning -> error: it stops the app) changed.
+//
+// First match wins inside trialStateOf, mirroring the retired resolver:
+//   out of credits  — the free grant is spent (depleted / remaining <= 0).
+//                     Beats the clock: a burned-through grant is "out of
+//                     credits" even with days left.
+//   trial ended     — the grant's 30-day clock ran out with credits left.
+//   trial active    — the clock is still running: "[XX] trial days remaining".
+// Returns { kind, title, body } or null (no grant clock on record).
+function trialStateOf(ent, { appName } = {}) {
+  const name = appName ?? "this app";
+  const granted = ent.granted ?? 0;
+  const used = ent.used ?? 0;
+  const remaining = ent.remaining ?? Math.max(granted - used, 0);
+  const daysLeft =
+    ent.grant_expires_at != null ? daysUntil(ent.grant_expires_at) : null;
+
+  if (ent.depleted === true || remaining <= 0) {
+    return {
+      kind: "out_of_credits",
+      title: "You're out of credits",
+      body: `You have used ${used}/${granted} free credits. Select one of the plans below to continue use of ${name}.`,
+    };
+  }
+  if (daysLeft != null && daysLeft <= 0) {
+    return {
+      kind: "trial_ended",
+      title: "Your trial has ended",
+      body: `Your free trial has ended. Select a plan to continue use of ${name}.`,
+    };
+  }
+  if (daysLeft != null) {
+    return {
+      kind: "trial_active",
+      title: `${daysLeft} trial days remaining`,
+      body: `You have ${daysLeft} days remaining in your trial period. Select a plan to continue use of ${name}.`,
+    };
+  }
+  return null;
+}
+
+// Trial states map onto the banner shape with the shared support footer and a
+// Billing-tab CTA (the copy asks for a plan; on non-Home pages nothing is
+// "below", so the button routes to the picker). out-of-credits/trial-ended
+// are RED (they stop the app), trial-active is YELLOW — Andrew 2026-10-13.
+const TRIAL_STATE_VARIANT = {
+  out_of_credits: "error",
+  trial_ended: "error",
+  trial_active: "warning",
+};
+
+function trialBannerView(trial) {
+  return {
+    variant: TRIAL_STATE_VARIANT[trial.kind],
+    title: trial.title,
+    message: trial.body,
+    footer: SUPPORT_FOOTER,
+    cta: { kind: "billing", label: "Go to Billing →" },
+  };
+}
+
 // Resolve the app-wide BillingBanner from the credits entitlement arm.
 // Returns null to render nothing (non-credits mode, pre-install, or healthy),
-// else { variant, title, message, cta } where cta is null or:
+// else { variant, title, message, footer?, cta } where cta is null or:
 //   { kind: "portal",  label } — link out to the Stripe billing-portal entry
 //                                point (payment-method fixes)
 //   { kind: "billing", label } — in-app navigate to the Billing tab
@@ -321,7 +390,23 @@ export function resolveCreditMeter(entitlement, creditMeter, credits = null) {
 // Driven by threshold_state for the top-up model; the legacy metered branches
 // (free depleted / paid over_included / free running-low) are byte-identical
 // to the pre-top-up banner.
-export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } = {}) {
+//
+// Precedence (first match wins):
+//   1. top_up_pending  (info)    — transient in-flight top-up
+//   2. top_up_failed   (error)   — card on file failed to process
+//   3. limit_reached   (warning)
+//   4. depleted        (error)   — THE out-of-credits block; existing
+//                                  byte-identical copy wins whenever the
+//                                  explicit signals (threshold_state /
+//                                  depleted flag / entitled=false) fire
+//   5. trial out_of_credits (error) — free grant spent WITHOUT the explicit
+//                                  signals (remaining <= 0 catch-all)
+//   6. trial ended     (error)   — the grant clock ran out with credits left
+//   7. over_included   (warning) — paid metered overage (never blocked)
+//   8. running low     (warning) — free grant under low_threshold
+//   9. trial active    (warning) — the countdown; yields to running-low, the
+//                                  more urgent of the two yellow states
+export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun, appName } = {}) {
   const ent = entitlement;
   if (!ent || ent.mode !== "credits" || ent.status === "not_installed") {
     return null;
@@ -362,6 +447,14 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
     };
   }
 
+  // The free-grant trial states (null for paid plans — a paid plan is past
+  // the trial). Computed BEFORE the depleted branch: a lapsed trial clock
+  // explains a legacy `entitled: false` reading better than "out of credits"
+  // (credits remain; the GRANT expired), so trial_ended wins over that one
+  // legacy signal below — but never over an explicit depleted flag or
+  // threshold_state "depleted".
+  const trial = onPaidPlan ? null : trialStateOf(ent, { appName });
+
   // --- Hard-blocked. threshold_state "depleted" is the ONLY blocking state
   // (a topup-model paid plan blocks at true zero); `over_included` overrides
   // a depleted reading so a metered paid account in overage is never shown as
@@ -371,7 +464,9 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
   const depleted =
     thresholdState != null
       ? thresholdState === "depleted" && !overIncluded
-      : !onPaidPlan && (ent.depleted === true || ent.entitled === false);
+      : !onPaidPlan &&
+        (ent.depleted === true ||
+          (ent.entitled === false && trial?.kind !== "trial_ended"));
 
   if (depleted) {
     return {
@@ -382,6 +477,11 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
         : `Your credits are used up. Choose a plan in Billing to keep ${label}.`,
       cta: { kind: "billing", label: "Go to Billing →" },
     };
+  }
+  // Free-grant blockers the explicit signals didn't catch: the spent grant
+  // (remaining <= 0 without any flag) and the lapsed trial clock.
+  if (trial && (trial.kind === "out_of_credits" || trial.kind === "trial_ended")) {
+    return trialBannerView(trial);
   }
   if (overIncluded) {
     return {
@@ -404,6 +504,11 @@ export function resolveBillingBanner(entitlement, { actionLabel, actionsNoun } =
       message: `You're almost out of credits. Pick a plan in Billing so your ${noun} don't get interrupted.`,
       cta: { kind: "billing", label: "Go to Billing →" },
     };
+  }
+  // Trial active — the countdown flies at the top in YELLOW for the whole
+  // trial (Andrew 2026-10-13), yielding only to running-low above.
+  if (trial?.kind === "trial_active") {
+    return trialBannerView(trial);
   }
 
   return null;

@@ -435,4 +435,67 @@ describe("BillingBanner", () => {
     expect(alert.variant).toBe("warning");
     expect(alert.title).toBe("You've used your included credits");
   });
+
+  // --- Trial states at the TOP (Andrew 2026-10-13 consolidation; the Home
+  // TrialBanner is retired). ---
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const isoFromNow = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
+
+  it("trial ended -> RED top banner with the footer line and a Billing CTA", () => {
+    const onNavigate = vi.fn();
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(
+        legacyFree({ grant_expires_at: isoFromNow(-2) }),
+        { app: { name: "Test App" } }
+      ),
+      onNavigate,
+    });
+    const alert = findAll(tree, "Alert")[0];
+    expect(alert.variant).toBe("error");
+    expect(alert.title).toBe("Your trial has ended");
+    const text = textOf(alert);
+    expect(text).toContain(
+      "Your free trial has ended. Select a plan to continue use of Test App."
+    );
+    expect(text).toContain("Need help? info@growthoperationsco.com");
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].children).toBe("Go to Billing →");
+    buttons[0].onClick();
+    expect(onNavigate).toHaveBeenCalledWith("/billing");
+  });
+
+  it("trial active -> YELLOW countdown banner at the top", () => {
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(
+        legacyFree({ grant_expires_at: isoFromNow(12) }),
+        { app: { name: "Test App" } }
+      ),
+      onNavigate: () => {},
+    });
+    const alert = findAll(tree, "Alert")[0];
+    expect(alert.variant).toBe("warning");
+    expect(alert.title).toBe("12 trial days remaining");
+    expect(textOf(alert)).toContain("Need help? info@growthoperationsco.com");
+  });
+
+  it("an explicit appName prop overrides state.app.name in the trial copy", () => {
+    const tree = renderComponent(BillingBanner, {
+      state: stateFor(legacyFree({ grant_expires_at: isoFromNow(5) }), {
+        app: { name: "Payload Name" },
+      }),
+      appName: "Prop Name",
+      onNavigate: () => {},
+    });
+    expect(textOf(tree)).toContain("continue use of Prop Name.");
+  });
+
+  it("healthy free account WITH a grant clock still shows the countdown (by design)", () => {
+    // Sanity: the yellow trial banner is expected on every page during the
+    // trial; a free account WITHOUT a clock renders nothing.
+    expect(
+      BillingBanner({ state: stateFor(legacyFree()), onNavigate: () => {} })
+    ).toBe(null);
+  });
 });
