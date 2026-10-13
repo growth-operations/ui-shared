@@ -114,6 +114,15 @@ export function resolvePlanFit(planFit) {
   return null;
 }
 
+// The plan_fit block lives at payload.state.plan_fit on base-hosted backends;
+// a self-hosted backend MAY emit it top-level instead. Dual-read (nested
+// wins), same as featureUsageOf — without this the banner/hero line silently
+// never render (shipped dead 2026-10-12, found 2026-10-13).
+export function planFitOf(state) {
+  if (!state || typeof state !== "object") return null;
+  return resolvePlanFit(state.state?.plan_fit ?? state.plan_fit);
+}
+
 // --- Period comparison ------------------------------------------------------
 
 // Resolve the period_comparison block (null until the install has one full
@@ -143,4 +152,13 @@ export function resolvePeriodComparison(periodComparison) {
     current,
     maxTotal: Math.max(last.total, current.total, 1),
   };
+}
+
+// Same nested-vs-top-level duality as planFitOf: base serves
+// payload.state.period_comparison; self-hosted backends MAY go top-level.
+export function periodComparisonOf(state) {
+  if (!state || typeof state !== "object") return null;
+  return resolvePeriodComparison(
+    state.state?.period_comparison ?? state.period_comparison
+  );
 }

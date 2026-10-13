@@ -53,6 +53,7 @@ export { useStrictModeEffect } from "./lib/useStrictModeEffect";
 export { resolveFeatureUsage, featureUsageOf } from "./lib/featureUsage";
 export {
   hasTopUpBank,
+  creditsBlockOf,
   resolveCreditMeter,
   resolveBillingBanner,
   parseLimitInput,
@@ -61,7 +62,9 @@ export {
   TRIAL_BANNER_FOOTER,
   resolveTrialBanner,
   resolvePlanFit,
+  planFitOf,
   resolvePeriodComparison,
+  periodComparisonOf,
 } from "./lib/homeBlocks";
 export {
   AUTO_PROVISION_TITLE,
