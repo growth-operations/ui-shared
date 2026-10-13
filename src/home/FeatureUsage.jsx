@@ -27,7 +27,10 @@ function MostUsedTile({ mostUsed }) {
       <Flex direction="column" gap="small">
         <Text format={{ fontWeight: "bold" }}>Most used features</Text>
         {mostUsed.map((f) => (
-          <Flex key={f.key} direction="row" gap="small">
+          // justify=between pins the count column flush-right so counts align
+          // across rows regardless of feature-name length (Jasper 2026-10-13:
+          // ragged gap-after-name read as broken alignment).
+          <Flex key={f.key} direction="row" justify="between" align="baseline">
             <Text>{f.name}</Text>
             <Text variant="microcopy">
               {f.count} {unitLabel(f.unit, f.count)}
