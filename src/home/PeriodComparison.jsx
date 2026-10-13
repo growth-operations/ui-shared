@@ -1,6 +1,6 @@
 import React from "react";
 import { Flex, Tile, Text, ProgressBar } from "@hubspot/ui-extensions";
-import { resolvePeriodComparison } from "../lib/homeBlocks";
+import { periodComparisonOf } from "../lib/homeBlocks";
 
 // The post-checklist Home usage block: the last full billing period vs the
 // current period-to-date, side by side — one bar per period (shared
@@ -41,7 +41,9 @@ function PeriodColumn({ period, maxTotal }) {
 }
 
 export function PeriodComparison({ state }) {
-  const view = resolvePeriodComparison(state?.period_comparison);
+  // periodComparisonOf dual-reads payload.state.period_comparison (base) ??
+  // payload.period_comparison (self-hosted).
+  const view = periodComparisonOf(state);
   if (!view) return null;
 
   return (

@@ -27,6 +27,7 @@ import {
 } from "@hubspot/ui-extensions";
 
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
+import { creditsBlockOf } from "../lib/creditDisplay";
 import { CreditMeter } from "../home/CreditMeter";
 
 const DEFAULT_BASE_PATH = "/api/v1/usage";
@@ -56,10 +57,13 @@ export function UsageTab({
   return (
     <Flex direction="column" gap="medium">
       {state && (
+        // creditsBlockOf dual-reads payload.state.credits (base) ??
+        // payload.credits (self-hosted) — a top-level-only read silently
+        // dropped the two-pool split + "renews on" line on base-hosted apps.
         <CreditMeter
           entitlement={state.entitlement}
           creditMeter={state.credit_meter}
-          credits={state.credits}
+          credits={creditsBlockOf(state)}
         />
       )}
 

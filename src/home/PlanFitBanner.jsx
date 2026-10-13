@@ -1,6 +1,6 @@
 import React from "react";
 import { Text, Alert } from "@hubspot/ui-extensions";
-import { resolvePlanFit } from "../lib/homeBlocks";
+import { planFitOf } from "../lib/homeBlocks";
 
 // The plan-fit savings banner: when state.plan_fit.verdict is
 // "upgrade_recommended", tell the customer what staying on their current tier
@@ -14,7 +14,10 @@ import { resolvePlanFit } from "../lib/homeBlocks";
 // Renders nothing when the block is absent or the verdict isn't
 // upgrade_recommended.
 export function PlanFitBanner({ state }) {
-  const fit = resolvePlanFit(state?.plan_fit);
+  // planFitOf dual-reads payload.state.plan_fit (base) ?? payload.plan_fit
+  // (self-hosted) — a top-level-only read left this banner dead on every
+  // base-hosted app (found 2026-10-13).
+  const fit = planFitOf(state);
   if (!fit || fit.kind !== "upgrade_recommended") return null;
 
   return (

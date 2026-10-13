@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   hasTopUpBank,
+  creditsBlockOf,
   resolveCreditMeter,
   resolveBillingBanner,
   parseLimitInput,
@@ -552,5 +553,35 @@ describe("parseLimitInput", () => {
   it("rejects zero — clearing the limit is a separate action", () => {
     expect(parseLimitInput("0").ok).toBe(false);
     expect(parseLimitInput("0.00").ok).toBe(false);
+  });
+});
+
+// Dual-read helper: base-hosted backends nest the credits block under
+// payload.state.credits; a self-hosted backend may emit it top-level. A
+// top-level-only read silently dropped the two-pool meter split on
+// base-hosted apps (found 2026-10-13).
+describe("creditsBlockOf", () => {
+  const block = {
+    monthly: { remaining: 900, included: 1000, renews_on: "2026-11-01" },
+    additional: { remaining: 1500, purchased: 2000, expires: false },
+  };
+
+  it("reads the nested payload.state.credits (base-hosted shape)", () => {
+    expect(creditsBlockOf({ state: { credits: block } })).toEqual(block);
+  });
+
+  it("falls back to a top-level credits block (self-hosted shape)", () => {
+    expect(creditsBlockOf({ credits: block })).toEqual(block);
+  });
+
+  it("nested wins when both are present", () => {
+    const other = { monthly: { remaining: 1, included: 1 } };
+    expect(creditsBlockOf({ credits: other, state: { credits: block } })).toEqual(block);
+  });
+
+  it("returns null when neither is present or state is malformed", () => {
+    expect(creditsBlockOf({})).toBe(null);
+    expect(creditsBlockOf(null)).toBe(null);
+    expect(creditsBlockOf("nope")).toBe(null);
   });
 });

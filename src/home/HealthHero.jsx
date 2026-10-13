@@ -26,8 +26,11 @@ export function HealthHero({ appName, state }) {
     // Plan-fit reinforcement: a healthy verdict on the right plan gets the
     // extra reassurance line; upgrade_recommended is carried by health
     // v2's "attention" reasons + the PlanFitBanner, not here.
+    // Dual-read: base nests plan_fit under payload.state; self-hosted
+    // backends MAY emit it top-level (same pattern as planFitOf).
+    const planFit = state.state?.plan_fit ?? state.plan_fit;
     const onRightPlan =
-      health.level === "healthy" && state.plan_fit?.verdict === "right_plan";
+      health.level === "healthy" && planFit?.verdict === "right_plan";
     return (
       <Flex direction="column" gap="small">
         {name && <Heading>{name}</Heading>}

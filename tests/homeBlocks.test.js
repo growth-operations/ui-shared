@@ -6,7 +6,9 @@ import {
   TRIAL_BANNER_FOOTER,
   resolveTrialBanner,
   resolvePlanFit,
+  planFitOf,
   resolvePeriodComparison,
+  periodComparisonOf,
 } from "../src/lib/homeBlocks";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -212,5 +214,73 @@ describe("resolvePeriodComparison", () => {
       current_period: period("Oct 2026", 3),
     });
     expect(view.last.byAction).toEqual([{ action: "Run", credits: 5 }]);
+  });
+});
+
+// Dual-read helpers: base-hosted backends nest these blocks under
+// payload.state; a self-hosted backend may emit them top-level. Reading only
+// one location left PlanFitBanner/PeriodComparison dead on base-hosted apps
+// (shipped 2026-10-12, found 2026-10-13).
+describe("planFitOf", () => {
+  const fit = {
+    verdict: "upgrade_recommended",
+    target_tier: "professional",
+    monthly_savings_usd: 40,
+    topup_packs_this_period: 3,
+  };
+
+  it("reads the nested payload.state.plan_fit (base-hosted shape)", () => {
+    const view = planFitOf({ state: { plan_fit: fit } });
+    expect(view?.kind).toBe("upgrade_recommended");
+  });
+
+  it("falls back to a top-level plan_fit (self-hosted shape)", () => {
+    const view = planFitOf({ plan_fit: fit });
+    expect(view?.kind).toBe("upgrade_recommended");
+  });
+
+  it("nested wins when both are present", () => {
+    const view = planFitOf({
+      plan_fit: { verdict: "right_plan" },
+      state: { plan_fit: fit },
+    });
+    expect(view?.kind).toBe("upgrade_recommended");
+  });
+
+  it("returns null when neither is present or state is malformed", () => {
+    expect(planFitOf({})).toBe(null);
+    expect(planFitOf(null)).toBe(null);
+    expect(planFitOf("nope")).toBe(null);
+  });
+});
+
+describe("periodComparisonOf", () => {
+  const period = (label, total) => ({
+    label,
+    total_credits: total,
+    by_action: [],
+  });
+  const block = {
+    last_period: period("Sep 2026", 120),
+    current_period: period("Oct 2026", 45),
+  };
+
+  it("reads the nested payload.state.period_comparison (base-hosted shape)", () => {
+    const view = periodComparisonOf({ state: { period_comparison: block } });
+    expect(view?.last.total).toBe(120);
+    expect(view?.maxTotal).toBe(120);
+  });
+
+  it("falls back to a top-level period_comparison (self-hosted shape)", () => {
+    const view = periodComparisonOf({ period_comparison: block });
+    expect(view?.current.total).toBe(45);
+  });
+
+  it("returns null when neither is present or the block is incomplete", () => {
+    expect(periodComparisonOf({})).toBe(null);
+    expect(periodComparisonOf(null)).toBe(null);
+    expect(
+      periodComparisonOf({ state: { period_comparison: { last_period: period("Sep", 1) } } })
+    ).toBe(null);
   });
 });

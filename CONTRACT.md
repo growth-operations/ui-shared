@@ -72,6 +72,11 @@ contract serves all archetypes; components branch on `entitlement.mode`.
   // ADDITIVE: absent on older backends — degrade gracefully (render the
   // pre-refresh UI) when "state" is missing. health v2 is mirrored into the
   // top-level "health" block too, so HealthHero gets "attention" either way.
+  // DUALITY: ui-shared dual-reads the state.* blocks (nested under "state"
+  // wins; top-level fallback) — a SELF-HOSTED backend (ATS) MAY emit
+  // credits/period_comparison/plan_fit/feature_usage TOP-LEVEL instead of
+  // nesting. Never read only one location (a top-level-only read shipped
+  // dead on base-hosted apps 2026-10-12; fixed 2026-10-13).
   "state": {
     "credits": {
       "monthly":    { "remaining": 900, "included": 1000,
@@ -107,18 +112,23 @@ contract serves all archetypes; components branch on `entitlement.mode`.
       "monthly_savings_usd": null,
       "topup_packs_this_period": 0
     },
-    // FEATURE USAGE — base feat/home-feature-usage. Aggregates DEBIT credits
-    // off the credit ledger (all-time, newest-first, bounded) through the
-    // app's static feature registry. Drives the shared <FeatureUsage> Home
-    // sections ("Most used features" + "Recommended to explore").
-    //   most_used  — top 5 features by credits; {key, name, credits_or_events}.
-    //                The field name anticipates event-denominated features: a
-    //                row MAY carry unit ("credits" | "events"); absent =>
-    //                "credits" (what every current backend emits).
+    // FEATURE USAGE — base feat/home-feature-usage, extended 2026-10-13 to
+    // non-credit signals. Aggregates DEBIT credits off the credit ledger
+    // (all-time, newest-first, bounded) AND/OR feature_usage event rows from
+    // BigQuery (growth_ops_usage.events), through the app's static feature
+    // registry (centralized in common.home.feature_registry). Drives the
+    // shared <FeatureUsage> Home sections ("Most used features" +
+    // "Recommended to explore").
+    //   most_used  — top 5 features by credits/events; {key, name,
+    //                credits_or_events, unit}. unit is LIVE ("credits" |
+    //                "events"): ledger-backed features report credits,
+    //                event-backed features (e.g. geocoding nearby lists, ATS
+    //                scorecards) report events; absent => "credits".
     //   not_in_use — every DETECTABLE registry feature with zero observed
-    //                usage (features with no ledger signal are never claimed
-    //                "not in use"); {key, name, docs_url, rationale} —
-    //                docs_url/rationale may be null/"".
+    //                usage (features with no signal source are never claimed
+    //                "not in use"; event-backed features are also spared when
+    //                the events read fails); {key, name, docs_url, rationale}
+    //                — docs_url/rationale may be null/"".
     // DEGRADATION: the block is ABSENT on older backends, legacy installs,
     // and apps with no feature registry — ui-shared renders NOTHING (never an
     // empty box). A fresh install gets most_used: [] and the full detectable
@@ -163,7 +173,7 @@ contract serves all archetypes; components branch on `entitlement.mode`.
   // ARCHETYPE ACTIVITY TILE — at most ONE present.
   "sync_pulse":   { "last_sync_at": "...", "records_synced": 1240, "records_failed": 2, "label": "Contact sync" }, // big_app
   "credit_meter": { "granted": 100, "used": 37, "remaining": 63, "recent": [ { "at": "...", "amount": 3, "action": "Parsed 3 line items on Deal Acme" } ] }, // credit — `recent` from the credit ledger (common.entitlements.CreditService.recent_usage → build_credit_meter); each entry projects a metered debit (action label + amount + time), so customers see itemized usage in-app.
-  "pipeline":     { "open_jobs": 4, "applications_by_stage": { "applied": 12, "interview": 3 }, "outstanding_scorecards": 5 }, // ats
+  "pipeline":     { "open_jobs": 4, "applications_by_stage": { "applied": 12, "interview": 3 }, "outstanding_scorecards": 5 }, // ats — fed by ATS /v1/home off the account's stats counters (approximate for pre-existing records until they churn)
 
   // PLANS — credit apps only. The pickable upgrade path for the Billing tab,
   // built from the Stripe catalog mirror (common.billing.catalog.get_plans).

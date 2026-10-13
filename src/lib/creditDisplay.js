@@ -98,6 +98,15 @@ function bankBarVariantFor(bankRemaining, bankGranted) {
   if (bankRemaining * 100 <= 50 * bankGranted) return "warning";
   return "success";
 }
+// The credits block lives at payload.state.credits on base-hosted backends; a
+// self-hosted backend MAY emit it top-level. Dual-read (nested wins), same as
+// featureUsageOf/planFitOf — without this the meter falls back to the legacy
+// single-bar path (no monthly/additional split, no "renews on" line).
+export function creditsBlockOf(state) {
+  if (!state || typeof state !== "object") return null;
+  return state.state?.credits ?? state.credits ?? null;
+}
+
 export function resolveCreditMeter(entitlement, creditMeter, credits = null) {
   const ent = entitlement?.mode === "credits" ? entitlement : null;
   const meter = creditMeter ?? null;
