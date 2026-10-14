@@ -28,8 +28,17 @@ export { AutoProvisionToggle } from "./billing/AutoProvisionToggle";
 // Alerts — the shared customer alerts table (level filter, sort, dismiss).
 export { AlertsTab } from "./alerts/AlertsTab";
 
-// Usage — the shared credit usage view (per-day LineChart + window stats).
+// Usage — the shared credit usage view (per-day LineChart + window stats, or
+// the billing-period stacked BarChart via UsageTab chart="billingPeriods").
 export { UsageTab } from "./usage/UsageTab";
+export {
+  BillingPeriodUsage,
+  BillingPeriodUsageView,
+  BILLING_PERIOD_OPTIONS,
+  makeUsageFetcher,
+  usageUrl,
+  usedWindowLabel,
+} from "./usage/BillingPeriodUsage";
 
 // Sandbox — the shared "Install on a sandbox" action (mints a signed link).
 export { SandboxInstall } from "./sandbox/SandboxInstall";
