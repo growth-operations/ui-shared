@@ -61,16 +61,19 @@ function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
       <Flex direction="column" gap="small">
         <Text format={{ fontWeight: "bold" }}>Recommended to explore</Text>
         {picks.map((f) => {
-          // Setup CTAs point at admin-only surfaces (the layout editor above
-          // all) — show them to super admins only; everyone else gets name +
-          // rationale alone (a non-admin clicking into a HubSpot permission
-          // wall is worse than no link).
+          // Setup CTAs are gated PER ITEM (1.28.0): adminOnly items point at
+          // HubSpot permission-wall surfaces (the layout editor above all) —
+          // super admins only, since a non-admin clicking into a permission
+          // wall is worse than no link. Items marked adminOnly: false are
+          // per-user surfaces (install the Chrome extension, open the in-app
+          // extension page) and render for everyone. Old backends emit no
+          // marker → adminOnly defaults true → the blanket gate is preserved.
           //
           // "Learn more →" (docs_url) intentionally NOT rendered (Jasper
           // 2026-10-14): every feature's docs_url points at the same single
           // setup guide — noise until per-feature articles exist. docs_url
           // stays in the wire contract; re-enabling is a one-line revert.
-          const ctas = isSuperAdmin ? f.ctas : [];
+          const ctas = f.ctas.filter((c) => !c.adminOnly || isSuperAdmin);
           return (
             <Flex key={f.key} direction="column" gap="extra-small">
               <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>

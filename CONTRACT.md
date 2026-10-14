@@ -173,9 +173,15 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // because one feature can surface in multiple places (e.g. a card on both
     // contacts and applications). For card-backed features "never used"
     // almost always means "the card was never added to the record layout", so
-    // the setup step beats another docs pointer. Rendered ONLY for
-    // user.is_super_admin — the targets are admin-only surfaces (a non-admin
-    // clicking into a HubSpot permission wall is worse than no link).
+    // the setup step beats another docs pointer.
+    // PER-ITEM ADMIN GATE (1.28.0): each item MAY carry "admin_only": false
+    // to mark a PER-USER surface (install the Chrome extension, open the
+    // in-app extension page) that renders for EVERY viewer. A MISSING marker
+    // means admin-only: those items render ONLY for user.is_super_admin —
+    // their targets are HubSpot permission walls (the layout editor above
+    // all), and a non-admin clicking into one is worse than no link. Old
+    // backends emit no marker, so the blanket super-admin gate is preserved
+    // for them.
     // LEARN MORE REMOVED (1.26.0): the docs_url "Learn more →" link is NOT
     // rendered for now (Jasper 2026-10-14 — all docs links point at the same
     // single setup guide: noise until per-feature articles exist). docs_url

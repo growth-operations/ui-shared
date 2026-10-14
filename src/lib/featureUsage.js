@@ -18,13 +18,17 @@ const normalizeUnit = (u) =>
 // One well-formed setup CTA is {label: non-empty string, url XOR route:
 // non-empty string}. Anything else (missing label, both targets, neither
 // target, wrong types) is dropped — a malformed item never renders.
+// admin_only (1.28.0): an explicit false marks a per-user surface (installing
+// the Chrome extension) that renders for EVERYONE; a missing marker means
+// admin-only, so old backends keep the blanket super-admin gate.
 const normalizeCta = (c) => {
   if (!c || typeof c !== "object") return null;
   const label = typeof c.label === "string" && c.label ? c.label : null;
   const url = typeof c.url === "string" && c.url ? c.url : null;
   const route = typeof c.route === "string" && c.route ? c.route : null;
   if (!label || !(url || route) || (url && route)) return null;
-  return url ? { label, url } : { label, route };
+  const adminOnly = c.admin_only !== false;
+  return { label, ...(url ? { url } : { route }), adminOnly };
 };
 
 // Resolve the feature_usage block into render-ready shape:
