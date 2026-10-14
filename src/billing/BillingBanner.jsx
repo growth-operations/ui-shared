@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Text, Alert, Button } from "@hubspot/ui-extensions";
+import { Box, Flex, Text, Alert, Button } from "@hubspot/ui-extensions";
 import { resolveBillingBanner } from "../lib/creditDisplay";
 
 // Shared app-wide billing banner for the credit archetype (CreditState.
@@ -94,24 +94,26 @@ export function BillingBanner({ state, actionLabel, actionsNoun, appName, onNavi
 
   return (
     <Alert title={banner.title} variant={banner.variant}>
-      <Flex direction="column" gap="extra-small">
-        <Text>{banner.message}</Text>
-        {/* The support footer line rides the trial-state banners (the same
-            microcopy the retired Home TrialBanner rendered). */}
-        {banner.footer && <Text variant="microcopy">{banner.footer}</Text>}
-        {banner.cta?.kind === "portal" && portalStartUrl ? (
-          <Button
-            variant="secondary"
-            href={{ url: portalStartUrl, external: true }}
-          >
-            {banner.cta.label}
-          </Button>
-        ) : !suppressInAppCta && banner.cta && onNavigate ? (
-          <Button variant="secondary" onClick={() => onNavigate("/billing")}>
-            {banner.cta.kind === "portal" ? "Go to Billing →" : banner.cta.label}
-          </Button>
-        ) : null}
-      </Flex>
+      <Box flex="auto">
+        <Flex direction="column" gap="extra-small">
+          <Text>{banner.message}</Text>
+          {/* The support footer line rides the trial-state banners (the same
+              microcopy the retired Home TrialBanner rendered). */}
+          {banner.footer && <Text variant="microcopy">{banner.footer}</Text>}
+          {banner.cta?.kind === "portal" && portalStartUrl ? (
+            <Button
+              variant="secondary"
+              href={{ url: portalStartUrl, external: true }}
+            >
+              {banner.cta.label}
+            </Button>
+          ) : !suppressInAppCta && banner.cta && onNavigate ? (
+            <Button variant="secondary" onClick={() => onNavigate("/billing")}>
+              {banner.cta.kind === "portal" ? "Go to Billing →" : banner.cta.label}
+            </Button>
+          ) : null}
+        </Flex>
+      </Box>
     </Alert>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Alert,
+  Box,
   Flex,
   Link,
   LoadingSpinner,
@@ -80,15 +81,17 @@ export function SubscriptionGate({
 
   return (
     <Alert title="No active subscription" variant="error">
-      <Flex direction="column" gap="extra-small">
-        <Text>
-          Your {appName} subscription was canceled. Your data is still here —
-          manage billing to pick up where you left off.
-        </Text>
-        {billingUrl && (
-          <Link href={{ url: billingUrl, external: true }}>Go to Billing</Link>
-        )}
-      </Flex>
+      <Box flex="auto">
+        <Flex direction="column" gap="extra-small">
+          <Text>
+            Your {appName} subscription was canceled. Your data is still here —
+            manage billing to pick up where you left off.
+          </Text>
+          {billingUrl && (
+            <Link href={{ url: billingUrl, external: true }}>Go to Billing</Link>
+          )}
+        </Flex>
+      </Box>
     </Alert>
   );
 }

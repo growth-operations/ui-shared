@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, Alert } from "@hubspot/ui-extensions";
+import { Box, Text, Alert } from "@hubspot/ui-extensions";
 import { planFitOf } from "../lib/homeBlocks";
 
 // The plan-fit savings banner: when state.plan_fit.verdict is
@@ -22,7 +22,9 @@ export function PlanFitBanner({ state }) {
 
   return (
     <Alert title="You could save on a higher plan" variant="warning">
-      <Text>{fit.text}</Text>
+      <Box flex="auto">
+        <Text>{fit.text}</Text>
+      </Box>
     </Alert>
   );
 }

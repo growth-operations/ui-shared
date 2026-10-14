@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Box,
   Flex,
   Heading,
   Text,
@@ -130,12 +131,14 @@ export function StatusPanel({ entitlement, plansAvailable = true, restartAvailab
             : "Add a payment method in Stripe before then so your subscription continues.";
     return (
       <Alert variant="warning">
-        <Flex direction="column" gap="extra-small">
-          <Text format={{ fontWeight: "bold" }}>{leftLabel}</Text>
-          <Text>
-            Trial ends {fmtDate(trialEnd)}. {trialCta}
-          </Text>
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>{leftLabel}</Text>
+            <Text>
+              Trial ends {fmtDate(trialEnd)}. {trialCta}
+            </Text>
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -149,28 +152,32 @@ export function StatusPanel({ entitlement, plansAvailable = true, restartAvailab
     if (cancel_at_period_end) {
       return (
         <Alert variant="warning">
-          <Flex direction="column" gap="extra-small">
-            <Text format={{ fontWeight: "bold" }}>
-              Your subscription is set to cancel
-            </Text>
-            <Text>
-              It stays active until {fmtDate(current_period_end)}, then your
-              data stops syncing. Changed your mind? Keep it below — no
-              re-checkout needed.
-            </Text>
-          </Flex>
+          <Box flex="auto">
+            <Flex direction="column" gap="extra-small">
+              <Text format={{ fontWeight: "bold" }}>
+                Your subscription is set to cancel
+              </Text>
+              <Text>
+                It stays active until {fmtDate(current_period_end)}, then your
+                data stops syncing. Changed your mind? Keep it below — no
+                re-checkout needed.
+              </Text>
+            </Flex>
+          </Box>
         </Alert>
       );
     }
     return (
       <Alert variant="success">
-        <Flex direction="column" gap="extra-small">
-          <Text format={{ fontWeight: "bold" }}>You're all set</Text>
-          <Text>
-            Your subscription is active. Next renewal:{" "}
-            {fmtDate(current_period_end)}.
-          </Text>
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>You're all set</Text>
+            <Text>
+              Your subscription is active. Next renewal:{" "}
+              {fmtDate(current_period_end)}.
+            </Text>
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -178,15 +185,17 @@ export function StatusPanel({ entitlement, plansAvailable = true, restartAvailab
   if (status === "past_due") {
     return (
       <Alert variant="error">
-        <Flex direction="column" gap="extra-small">
-          <Text format={{ fontWeight: "bold" }}>
-            Your subscription is past due
-          </Text>
-          <Text>
-            We couldn't process your latest payment. Update your payment method
-            in Stripe to avoid losing access.
-          </Text>
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>
+              Your subscription is past due
+            </Text>
+            <Text>
+              We couldn't process your latest payment. Update your payment method
+              in Stripe to avoid losing access.
+            </Text>
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -205,10 +214,12 @@ export function StatusPanel({ entitlement, plansAvailable = true, restartAvailab
         : "Choose a plan below to resume syncing your data.";
     return (
       <Alert variant="warning">
-        <Flex direction="column" gap="extra-small">
-          <Text format={{ fontWeight: "bold" }}>Your free trial has ended</Text>
-          <Text>{resumeCta}</Text>
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>Your free trial has ended</Text>
+            <Text>{resumeCta}</Text>
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -227,13 +238,15 @@ export function StatusPanel({ entitlement, plansAvailable = true, restartAvailab
         : "Restart your previous plan below in one click, or choose a different one — either way your data starts syncing again.";
     return (
       <Alert variant="warning">
-        <Flex direction="column" gap="extra-small">
-          <Text format={{ fontWeight: "bold" }}>Your subscription was canceled</Text>
-          <Text>{resumeCta}</Text>
-          {!plansAvailable && (
-            <Text variant="microcopy">{SUPPORT_FOOTER}</Text>
-          )}
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            <Text format={{ fontWeight: "bold" }}>Your subscription was canceled</Text>
+            <Text>{resumeCta}</Text>
+            {!plansAvailable && (
+              <Text variant="microcopy">{SUPPORT_FOOTER}</Text>
+            )}
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -258,12 +271,14 @@ export function TrialSubscriptionBilling({ context, state, appKey, openIframe = 
     return (
       <Flex direction="column" gap="medium">
         <Alert title="Billing isn't set up yet" variant="info">
-          <Text>
-            Your trial and billing are still being set up for this install. Once
-            setup completes, manage your plan and payment method here. If this
-            persists, reinstall the app from the HubSpot marketplace to complete
-            sign-in.
-          </Text>
+          <Box flex="auto">
+            <Text>
+              Your trial and billing are still being set up for this install. Once
+              setup completes, manage your plan and payment method here. If this
+              persists, reinstall the app from the HubSpot marketplace to complete
+              sign-in.
+            </Text>
+          </Box>
         </Alert>
       </Flex>
     );
@@ -545,7 +560,9 @@ function InvoiceHistory({ billingBaseUrl, billingActionToken }) {
   if (status === "error") {
     return (
       <Alert title="Couldn't load invoice history" variant="warning">
-        <Text>Refresh the page to try again.</Text>
+        <Box flex="auto">
+          <Text>Refresh the page to try again.</Text>
+        </Box>
       </Alert>
     );
   }
@@ -719,10 +736,12 @@ function LegacyBilling({ state }) {
   return (
     <Flex direction="column" gap="medium">
       <Alert title="Managed through your existing subscription" variant="info">
-        <Text>
-          Your plan and payment method are billed through your existing
-          subscription. There's nothing to set up here.
-        </Text>
+        <Box flex="auto">
+          <Text>
+            Your plan and payment method are billed through your existing
+            subscription. There's nothing to set up here.
+          </Text>
+        </Box>
       </Alert>
       {manageUrl && (
         <Button href={{ url: manageUrl, external: true }} variant="secondary">
@@ -736,13 +755,15 @@ function LegacyBilling({ state }) {
 function CompedBilling() {
   return (
     <Alert variant="success">
-      <Flex direction="column" gap="extra-small">
-        <Text format={{ fontWeight: "bold" }}>Free access</Text>
-        <Text>
-          Your account has been granted complimentary access as a Growth Operations partner or
-          team member. No payment method or subscription is required.
-        </Text>
-      </Flex>
+      <Box flex="auto">
+        <Flex direction="column" gap="extra-small">
+          <Text format={{ fontWeight: "bold" }}>Free access</Text>
+          <Text>
+            Your account has been granted complimentary access as a Growth Operations partner or
+            team member. No payment method or subscription is required.
+          </Text>
+        </Flex>
+      </Box>
     </Alert>
   );
 }
@@ -770,7 +791,9 @@ export function BillingTab({ context, state, appKey, openIframe = null }) {
       <Heading>Billing</Heading>
       {!isSuperAdmin ? (
         <Alert variant="warning" title="Access restricted">
-          <Text>Billing settings are only available to super admins.</Text>
+          <Box flex="auto">
+            <Text>Billing settings are only available to super admins.</Text>
+          </Box>
         </Alert>
       ) : mode === "legacy" ? (
         <LegacyBilling state={billingState} />

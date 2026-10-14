@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useState } from "react";
-import { Alert, Button, Flex, Heading, Text, Toggle } from "@hubspot/ui-extensions";
+import { Alert, Box, Button, Flex, Heading, Text, Toggle } from "@hubspot/ui-extensions";
 import {
   AUTO_PROVISION_CONFIRM_NO,
   AUTO_PROVISION_CONFIRM_YES,
@@ -101,26 +101,28 @@ export function AutoProvisionToggle({
           cancel snaps back to idle with the flag untouched). */}
       {ui.phase === "confirming" && (
         <Alert variant="warning" title="Disable automatic credit provisioning?">
-          <Flex direction="column" gap="small">
-            <Text>{autoProvisionConfirmBody(appName)}</Text>
-            <Flex direction="row" gap="small">
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  dispatch({ type: "confirm" });
-                  save(false);
-                }}
-              >
-                {AUTO_PROVISION_CONFIRM_YES}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => dispatch({ type: "cancel" })}
-              >
-                {AUTO_PROVISION_CONFIRM_NO}
-              </Button>
+          <Box flex="auto">
+            <Flex direction="column" gap="small">
+              <Text>{autoProvisionConfirmBody(appName)}</Text>
+              <Flex direction="row" gap="small">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    dispatch({ type: "confirm" });
+                    save(false);
+                  }}
+                >
+                  {AUTO_PROVISION_CONFIRM_YES}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => dispatch({ type: "cancel" })}
+                >
+                  {AUTO_PROVISION_CONFIRM_NO}
+                </Button>
+              </Flex>
             </Flex>
-          </Flex>
+          </Box>
         </Alert>
       )}
 
@@ -129,7 +131,9 @@ export function AutoProvisionToggle({
           variant={ui.notice.variant}
           title={ui.notice.variant === "success" ? "Saved" : "Couldn't save"}
         >
-          <Text>{ui.notice.text}</Text>
+          <Box flex="auto">
+            <Text>{ui.notice.text}</Text>
+          </Box>
         </Alert>
       )}
     </Flex>

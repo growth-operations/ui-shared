@@ -10,6 +10,7 @@ vi.mock("@hubspot/ui-extensions", async () => {
 
 import { CreditMeter } from "../src/home/CreditMeter";
 import { BillingBanner } from "../src/billing/BillingBanner";
+import { HealthHero } from "../src/home/HealthHero";
 import { renderComponent, findAll, textOf } from "./helpers/render.js";
 
 const legacyFree = (over = {}) => ({
@@ -497,5 +498,27 @@ describe("BillingBanner", () => {
     expect(
       BillingBanner({ state: stateFor(legacyFree()), onNavigate: () => {} })
     ).toBe(null);
+  });
+});
+
+describe("HealthHero", () => {
+  it("healthy + right_plan hero wraps the Alert body in a growing Box", () => {
+    // HubSpot's Alert lays icon + title + children in ONE ROW inside a
+    // width-capped content area — without a growing wrapper the body copy
+    // squeezes into a narrow column (seen on the ATS app-home hero). Every
+    // Alert body gets <Box flex="auto"> so it absorbs the free width.
+    const tree = renderComponent(HealthHero, {
+      appName: "Test App",
+      state: {
+        health: { level: "healthy", reasons: ["Sync is up to date"] },
+        state: { plan_fit: { verdict: "right_plan" } },
+      },
+    });
+    const alert = findAll(tree, "Alert")[0];
+    expect(alert.variant).toBe("success");
+    const boxes = findAll(alert, "Box");
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0].flex).toBe("auto");
+    expect(textOf(boxes[0])).toContain("...and you're on the right plan");
   });
 });
