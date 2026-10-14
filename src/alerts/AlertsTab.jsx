@@ -23,6 +23,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Alert,
+  Box,
   EmptyState,
   Text,
   Link,
@@ -207,7 +208,7 @@ export function AlertsTab({
   if (error) {
     return (
       <Alert title="Couldn't load alerts" variant="error">
-        {error}
+        <Box flex="auto">{error}</Box>
       </Alert>
     );
   }

@@ -31,6 +31,7 @@
 // calm message.
 import React, { useEffect, useState } from "react";
 import {
+  Box,
   Flex,
   Tile,
   Heading,
@@ -141,13 +142,17 @@ export function SandboxInstall({
 
       {error && (
         <Alert title="Couldn't create a sandbox link" variant="warning">
-          <Text>{error}</Text>
+          <Box flex="auto">
+            <Text>{error}</Text>
+          </Box>
         </Alert>
       )}
 
       {uninstallError && (
         <Alert title="Couldn't uninstall that sandbox" variant="warning">
-          <Text>{uninstallError}</Text>
+          <Box flex="auto">
+            <Text>{uninstallError}</Text>
+          </Box>
         </Alert>
       )}
 

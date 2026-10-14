@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Select, LoadingSpinner, Alert, Flex, Text, Link } from "@hubspot/ui-extensions";
+import { Box, Select, LoadingSpinner, Alert, Flex, Text, Link } from "@hubspot/ui-extensions";
 import { useToken } from "../sdk/index";
 import { getForms } from "../sdk/hubspot/forms";
 import { getLists } from "../sdk/hubspot/lists";
@@ -137,7 +137,9 @@ export function OptionSelect({
   if (error) {
     return (
       <Alert title={`Couldn't load ${label.toLowerCase()}`} variant="danger">
-        <Text>{error}</Text>
+        <Box flex="auto">
+          <Text>{error}</Text>
+        </Box>
       </Alert>
     );
   }

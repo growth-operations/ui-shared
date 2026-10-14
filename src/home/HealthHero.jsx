@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Heading, Alert, Text } from "@hubspot/ui-extensions";
+import { Box, Flex, Heading, Alert, Text } from "@hubspot/ui-extensions";
 import { humanizeStatus, statusVariant } from "../lib/format";
 
 const HEALTH_VARIANT = { healthy: "success", attention: "warning", critical: "error" };
@@ -38,12 +38,14 @@ export function HealthHero({ appName, state }) {
           title={HEALTH_TITLE[health.level] ?? "Status"}
           variant={HEALTH_VARIANT[health.level] ?? "info"}
         >
-          <Flex direction="column" gap="extra-small">
-            {(health.reasons ?? []).map((r, i) => (
-              <Text key={i}>{r}</Text>
-            ))}
-            {onRightPlan && <Text>...and you're on the right plan</Text>}
-          </Flex>
+          <Box flex="auto">
+            <Flex direction="column" gap="extra-small">
+              {(health.reasons ?? []).map((r, i) => (
+                <Text key={i}>{r}</Text>
+              ))}
+              {onRightPlan && <Text>...and you're on the right plan</Text>}
+            </Flex>
+          </Box>
         </Alert>
       </Flex>
     );
@@ -64,7 +66,9 @@ export function HealthHero({ appName, state }) {
       <Flex direction="column" gap="small">
         {name && <Heading>{name}</Heading>}
         <Alert title="Free access" variant="success">
-          <Text>Partner or team member access — no subscription required.</Text>
+          <Box flex="auto">
+            <Text>Partner or team member access — no subscription required.</Text>
+          </Box>
         </Alert>
       </Flex>
     );
@@ -84,13 +88,15 @@ export function HealthHero({ appName, state }) {
       <Flex direction="column" gap="small">
         {name && <Heading>{name}</Heading>}
         <Alert title={title} variant={variant}>
-          {(depleted || low) && (
-            <Text>
-              {depleted
-                ? "Pick a plan in Billing to keep going."
-                : "You're getting close to your limit — consider a plan in Billing."}
-            </Text>
-          )}
+          <Box flex="auto">
+            {(depleted || low) && (
+              <Text>
+                {depleted
+                  ? "Pick a plan in Billing to keep going."
+                  : "You're getting close to your limit — consider a plan in Billing."}
+              </Text>
+            )}
+          </Box>
         </Alert>
       </Flex>
     );
@@ -101,12 +107,14 @@ export function HealthHero({ appName, state }) {
     <Flex direction="column" gap="small">
       {name && <Heading>{name}</Heading>}
       <Alert title={humanizeStatus(ent.status)} variant={statusVariant(ent.status)}>
-        {ent.entitled === false && (
-          <Text>
-            This install isn't on an active plan. Open Billing to choose a plan
-            and resume syncing.
-          </Text>
-        )}
+        <Box flex="auto">
+          {ent.entitled === false && (
+            <Text>
+              This install isn't on an active plan. Open Billing to choose a plan
+              and resume syncing.
+            </Text>
+          )}
+        </Box>
       </Alert>
     </Flex>
   );

@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import {
+  Box,
   Flex,
   Tile,
   Text,
@@ -54,20 +55,22 @@ export function InstallProgress({ state, onRetry }) {
   if (status === "failed") {
     return (
       <Alert title="Setup didn't finish" variant="error">
-        <Flex direction="column" gap="small">
-          <Text>
-            We hit a problem finishing your install. This often clears itself on
-            the next automatic retry; if it persists, retry now or contact
-            support.
-          </Text>
-          {warnings.length > 0 &&
-            warnings.map((w, i) => <Text key={i}>• {w}</Text>)}
-          {onRetry && (
-            <Button variant="primary" onClick={onRetry}>
-              Retry setup
-            </Button>
-          )}
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="small">
+            <Text>
+              We hit a problem finishing your install. This often clears itself on
+              the next automatic retry; if it persists, retry now or contact
+              support.
+            </Text>
+            {warnings.length > 0 &&
+              warnings.map((w, i) => <Text key={i}>• {w}</Text>)}
+            {onRetry && (
+              <Button variant="primary" onClick={onRetry}>
+                Retry setup
+              </Button>
+            )}
+          </Flex>
+        </Box>
       </Alert>
     );
   }
@@ -95,11 +98,13 @@ export function InstallProgress({ state, onRetry }) {
   if (complete && warnings.length > 0) {
     return (
       <Alert title="Setup finished with warnings" variant="warning">
-        <Flex direction="column" gap="extra-small">
-          {warnings.map((w, i) => (
-            <Text key={i}>• {w}</Text>
-          ))}
-        </Flex>
+        <Box flex="auto">
+          <Flex direction="column" gap="extra-small">
+            {warnings.map((w, i) => (
+              <Text key={i}>• {w}</Text>
+            ))}
+          </Flex>
+        </Box>
       </Alert>
     );
   }

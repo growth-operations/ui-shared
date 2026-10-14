@@ -13,6 +13,7 @@
 import React, { useState } from "react";
 import {
   hubspot,
+  Box,
   Flex,
   Heading,
   Text,
@@ -131,7 +132,9 @@ function UsageContent({ context, basePath, portalId, appName, days }) {
   if (error) {
     return (
       <Alert title="Couldn't load usage" variant="warning">
-        <Text>{error}</Text>
+        <Box flex="auto">
+          <Text>{error}</Text>
+        </Box>
       </Alert>
     );
   }

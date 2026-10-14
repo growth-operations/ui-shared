@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Tile, Text, ProgressBar, StatusTag, Alert } from "@hubspot/ui-extensions";
+import { Box, Flex, Tile, Text, ProgressBar, StatusTag, Alert } from "@hubspot/ui-extensions";
 import { daysUntil, fmtDate } from "../lib/format";
 import { resolveCreditMeter } from "../lib/creditDisplay";
 
@@ -142,7 +142,9 @@ export function CreditMeter({ entitlement, creditMeter, credits = null }) {
 
         {alert && (
           <Alert title={alert.title} variant={alert.variant}>
-            <Text>{alert.message}</Text>
+            <Box flex="auto">
+              <Text>{alert.message}</Text>
+            </Box>
           </Alert>
         )}
       </Flex>
