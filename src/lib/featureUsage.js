@@ -39,6 +39,12 @@ export function resolveFeatureUsage(featureUsage) {
       name: f.name,
       docsUrl: typeof f.docs_url === "string" && f.docs_url ? f.docs_url : null,
       rationale: typeof f.rationale === "string" ? f.rationale : "",
+      // Optional SETUP action (the same cta_* vocabulary as nudges): the "go
+      // do the thing" deep link for an unused feature — layout editor, store
+      // listing, or in-app route. Absent on backends that predate it.
+      ctaLabel: typeof f.cta_label === "string" && f.cta_label ? f.cta_label : null,
+      ctaUrl: typeof f.cta_url === "string" && f.cta_url ? f.cta_url : null,
+      ctaRoute: typeof f.cta_route === "string" && f.cta_route ? f.cta_route : null,
     }));
 
   if (mostUsed.length === 0 && notInUse.length === 0) return null;

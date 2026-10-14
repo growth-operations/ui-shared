@@ -65,6 +65,9 @@ describe("resolveFeatureUsage", () => {
         name: "Nearby Lists",
         docsUrl: "https://example.com/guide",
         rationale: "Build static lists of the records nearest to any location.",
+        ctaLabel: null,
+        ctaUrl: null,
+        ctaRoute: null,
       },
     ]);
   });
@@ -93,7 +96,15 @@ describe("resolveFeatureUsage", () => {
       not_in_use: [{ key: "k", name: "K" }],
     });
     expect(view.notInUse).toEqual([
-      { key: "k", name: "K", docsUrl: null, rationale: "" },
+      {
+        key: "k",
+        name: "K",
+        docsUrl: null,
+        rationale: "",
+        ctaLabel: null,
+        ctaUrl: null,
+        ctaRoute: null,
+      },
     ]);
   });
 });
@@ -413,5 +424,116 @@ describe("rotationDayHash", () => {
     expect(rotationDayHash("2026-10-13")).toBe(2772548014);
     expect(rotationDayHash("2026-10-13")).toBe(rotationDayHash("2026-10-13"));
     expect(rotationDayHash("2026-10-13")).not.toBe(rotationDayHash("2026-10-14"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Setup CTAs on recommendations (1.24.0) — the "go do the thing" action
+// (layout editor / store / in-app route), super-admin gated.
+// ---------------------------------------------------------------------------
+
+describe("FeatureUsage setup CTAs", () => {
+  const ctaBlock = (entry) => ({ most_used: [], not_in_use: [entry] });
+  const adminState = (feature_usage) => ({
+    state: { feature_usage },
+    user: { is_super_admin: true },
+  });
+
+  it("resolver passes cta fields through, nulls when absent", () => {
+    const view = resolveFeatureUsage({
+      most_used: [],
+      not_in_use: [
+        { key: "a", name: "A", cta_label: "Add it", cta_url: "https://x.test" },
+        { key: "b", name: "B" },
+      ],
+    });
+    expect(view.notInUse[0]).toMatchObject({
+      ctaLabel: "Add it",
+      ctaUrl: "https://x.test",
+      ctaRoute: null,
+    });
+    expect(view.notInUse[1]).toMatchObject({
+      ctaLabel: null,
+      ctaUrl: null,
+      ctaRoute: null,
+    });
+  });
+
+  it("super admin sees the url CTA first, docs link second", () => {
+    const tree = renderComponent(FeatureUsage, {
+      state: adminState(
+        ctaBlock({
+          key: "rs",
+          name: "Resume Summaries",
+          docs_url: "https://example.com/guide",
+          rationale: "r",
+          cta_label: "Add the card",
+          cta_url:
+            "https://app.hubspot.com/layout-editor/1/CRM_RECORD_PAGE/0-1/edit/HubspotProvided-CRM_RECORD_PAGE",
+        })
+      ),
+    });
+    const links = findAll(tree, "Link");
+    expect(links).toHaveLength(2);
+    expect(links[0].href.url).toContain("layout-editor");
+    expect(textOf(links[0])).toContain("Add the card");
+    expect(links[1].href).toEqual({ url: "https://example.com/guide", external: true });
+  });
+
+  it("non-admins get no setup CTA — docs link only", () => {
+    const entry = {
+      key: "rs",
+      name: "Resume Summaries",
+      docs_url: "https://example.com/guide",
+      cta_label: "Add the card",
+      cta_url: "https://app.hubspot.com/layout-editor/1/x",
+    };
+    for (const state of [
+      { state: { feature_usage: ctaBlock(entry) }, user: { is_super_admin: false } },
+      { state: { feature_usage: ctaBlock(entry) } }, // no user block at all
+    ]) {
+      const tree = renderComponent(FeatureUsage, { state });
+      const links = findAll(tree, "Link");
+      expect(links).toHaveLength(1);
+      expect(links[0].href.url).toBe("https://example.com/guide");
+      expect(textOf(tree)).not.toContain("Add the card");
+    }
+  });
+
+  it("route CTAs render a Button wired to onNavigate", () => {
+    const onNavigate = vi.fn();
+    const tree = renderComponent(FeatureUsage, {
+      state: adminState(
+        ctaBlock({
+          key: "cs",
+          name: "Careers Site",
+          docs_url: "https://example.com/guide",
+          cta_label: "Set up your careers site",
+          cta_route: "/careers-site",
+        })
+      ),
+      onNavigate,
+    });
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    expect(textOf(buttons[0])).toContain("Set up your careers site");
+    buttons[0].onClick();
+    expect(onNavigate).toHaveBeenCalledWith("/careers-site");
+  });
+
+  it("route CTA without onNavigate renders no button (docs link stays)", () => {
+    const tree = renderComponent(FeatureUsage, {
+      state: adminState(
+        ctaBlock({
+          key: "cs",
+          name: "Careers Site",
+          docs_url: "https://example.com/guide",
+          cta_label: "Set up your careers site",
+          cta_route: "/careers-site",
+        })
+      ),
+    });
+    expect(findAll(tree, "Button")).toHaveLength(0);
+    expect(findAll(tree, "Link")).toHaveLength(1);
   });
 });

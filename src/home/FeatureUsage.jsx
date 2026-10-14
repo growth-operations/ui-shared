@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Tile, Text, Link } from "@hubspot/ui-extensions";
+import { Flex, Tile, Text, Link, Button } from "@hubspot/ui-extensions";
 import {
   featureUsageOf,
   pickDailyRecommendations,
@@ -46,7 +46,7 @@ function MostUsedTile({ mostUsed }) {
   );
 }
 
-function RecommendedTile({ notInUse }) {
+function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
   if (notInUse.length === 0) return null;
   // Long lists (ATS: 13 features) render as a rotating daily slice instead of
   // a wall — the whole list still arrives in the payload; the window is a
@@ -59,17 +59,34 @@ function RecommendedTile({ notInUse }) {
     <Tile>
       <Flex direction="column" gap="small">
         <Text format={{ fontWeight: "bold" }}>Recommended to explore</Text>
-        {picks.map((f) => (
-          <Flex key={f.key} direction="column" gap="extra-small">
-            <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>
-            {f.rationale ? <Text>{f.rationale}</Text> : null}
-            {f.docsUrl ? (
-              <Link href={{ url: f.docsUrl, external: true }}>
-                Learn more →
-              </Link>
-            ) : null}
-          </Flex>
-        ))}
+        {picks.map((f) => {
+          // Setup CTAs point at admin-only surfaces (the layout editor above
+          // all) — show them to super admins only; everyone else keeps the
+          // docs link (a non-admin clicking into a HubSpot permission wall is
+          // worse than no link).
+          const showCta = isSuperAdmin && f.ctaLabel && (f.ctaUrl || f.ctaRoute);
+          return (
+            <Flex key={f.key} direction="column" gap="extra-small">
+              <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>
+              {f.rationale ? <Text>{f.rationale}</Text> : null}
+              {showCta && f.ctaUrl ? (
+                <Link href={{ url: f.ctaUrl, external: true }}>
+                  {f.ctaLabel} →
+                </Link>
+              ) : null}
+              {showCta && !f.ctaUrl && f.ctaRoute && onNavigate ? (
+                <Button variant="secondary" onClick={() => onNavigate(f.ctaRoute)}>
+                  {f.ctaLabel}
+                </Button>
+              ) : null}
+              {f.docsUrl ? (
+                <Link href={{ url: f.docsUrl, external: true }}>
+                  Learn more →
+                </Link>
+              ) : null}
+            </Flex>
+          );
+        })}
         {recommendationsRotated(notInUse) ? (
           <Text variant="microcopy">
             New picks daily — {notInUse.length} features to explore in all.
@@ -80,13 +97,17 @@ function RecommendedTile({ notInUse }) {
   );
 }
 
-export function FeatureUsage({ state }) {
+export function FeatureUsage({ state, onNavigate }) {
   const view = featureUsageOf(state);
   if (!view) return null;
   return (
     <>
       <MostUsedTile mostUsed={view.mostUsed} />
-      <RecommendedTile notInUse={view.notInUse} />
+      <RecommendedTile
+        notInUse={view.notInUse}
+        isSuperAdmin={state?.user?.is_super_admin === true}
+        onNavigate={onNavigate}
+      />
     </>
   );
 }
