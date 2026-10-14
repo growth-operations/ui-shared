@@ -159,7 +159,7 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
           on the non-billing setup steps (NOT the paid-gated plan step) so a
           fresh install sees setup first but free/trial installs aren't
           locked out. */}
-      {setupStepsComplete && <FeatureUsage state={state} />}
+      {setupStepsComplete && <FeatureUsage state={state} onNavigate={onNavigate} />}
 
       <FeatureNudges nudges={state.nudges} onNavigate={onNavigate} />
 
