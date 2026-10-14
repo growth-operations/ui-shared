@@ -52,3 +52,44 @@ export function featureUsageOf(state) {
   if (!state || typeof state !== "object") return null;
   return resolveFeatureUsage(state.state?.feature_usage ?? state.feature_usage);
 }
+
+// --- Recommendation rotation ------------------------------------------------
+
+// A long not_in_use list is a firehose: a fresh install of a big app (ATS
+// has 13 registered features) gets the whole registry dumped on Home exactly
+// when focus matters most, and a wall of 13 "Read the guide" links teaches
+// nothing. So short lists (<= RECOMMENDATION_WHOLE_LIST_MAX) render whole;
+// longer lists show a deterministic daily slice that rotates day over day.
+// The seed is the UTC date alone — same picks all day, no per-portal state,
+// no backend involvement (the full list still arrives in the payload).
+export const RECOMMENDATION_PICK_COUNT = 3;
+export const RECOMMENDATION_WHOLE_LIST_MAX = 4;
+
+// djb2 over the date string — tiny, stable across browsers, good enough for
+// a day offset (not a security or money decision).
+export function rotationDayHash(dateISO) {
+  let h = 5381;
+  for (let i = 0; i < dateISO.length; i++) {
+    h = ((h << 5) + h + dateISO.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+// The slice to render for `todayISO` ("YYYY-MM-DD", UTC). Order within the
+// day stays registry order; the window wraps around the end of the list.
+// Pure + date-injected so tests don't depend on the wall clock.
+export function pickDailyRecommendations(notInUse, todayISO) {
+  if (!Array.isArray(notInUse)) return [];
+  if (notInUse.length <= RECOMMENDATION_WHOLE_LIST_MAX) return notInUse;
+  const start = rotationDayHash(todayISO) % notInUse.length;
+  return Array.from(
+    { length: RECOMMENDATION_PICK_COUNT },
+    (_, i) => notInUse[(start + i) % notInUse.length]
+  );
+}
+
+// True when rotation truncated the list — the tile shows a quiet "new picks
+// daily" hint only then, so small registries read exactly as before.
+export function recommendationsRotated(notInUse) {
+  return Array.isArray(notInUse) && notInUse.length > RECOMMENDATION_WHOLE_LIST_MAX;
+}

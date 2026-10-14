@@ -1,6 +1,10 @@
 import React from "react";
 import { Flex, Tile, Text, Link } from "@hubspot/ui-extensions";
-import { featureUsageOf } from "../lib/featureUsage";
+import {
+  featureUsageOf,
+  pickDailyRecommendations,
+  recommendationsRotated,
+} from "../lib/featureUsage";
 
 // The Home "Most used features" / "Recommended to explore" sections, fed by
 // the additive state.feature_usage block (per-app feature registry + credit
@@ -44,21 +48,33 @@ function MostUsedTile({ mostUsed }) {
 
 function RecommendedTile({ notInUse }) {
   if (notInUse.length === 0) return null;
+  // Long lists (ATS: 13 features) render as a rotating daily slice instead of
+  // a wall — the whole list still arrives in the payload; the window is a
+  // pure function of the UTC date (see ../lib/featureUsage).
+  const picks = pickDailyRecommendations(
+    notInUse,
+    new Date().toISOString().slice(0, 10)
+  );
   return (
     <Tile>
       <Flex direction="column" gap="small">
         <Text format={{ fontWeight: "bold" }}>Recommended to explore</Text>
-        {notInUse.map((f) => (
+        {picks.map((f) => (
           <Flex key={f.key} direction="column" gap="extra-small">
             <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>
             {f.rationale ? <Text>{f.rationale}</Text> : null}
             {f.docsUrl ? (
               <Link href={{ url: f.docsUrl, external: true }}>
-                Read the guide →
+                Learn more →
               </Link>
             ) : null}
           </Flex>
         ))}
+        {recommendationsRotated(notInUse) ? (
+          <Text variant="microcopy">
+            New picks daily — {notInUse.length} features to explore in all.
+          </Text>
+        ) : null}
       </Flex>
     </Tile>
   );
