@@ -99,7 +99,27 @@ contract serves all archetypes; components branch on `entitlement.mode`.
       "last_period":    { "label": "Sep 12 – Oct 11", "total_credits": 410,
                           "by_action": [{ "action": "geo.lookup", "credits": 410 }] },
       "current_period": { "label": "Oct 12 – present", "total_credits": 96,
-                          "by_action": [{ "action": "geo.lookup", "credits": 96 }] }
+                          "by_action": [{ "action": "geo.lookup", "credits": 96 }] },
+      // PERIODS CHART (1.27.0; ADDITIVE — older backends omit it and get the
+      // legacy two-column layout): 2-3 billing-period windows OLDEST → NEWEST
+      // (a third bar appears once a second full period has closed; annual
+      // plans produce annual bars), with FRIENDLY slice names server-side.
+      // by_action entries carry {action, name, credits} — render "name";
+      // slices are capped server-side (top 7 by cross-period credits, rest
+      // folded into a per-period "Other" slice); total_credits is uncapped.
+      // A zero-usage period emits by_action: [] — zero-fill one 0-credit row
+      // so the bar renders empty instead of dropping the category. ui-shared
+      // renders ONE stacked BarChart (x = period category, y = credits,
+      // groupFieldByColor = feature, stacking) + a per-period totals caption.
+      "periods": [
+        { "label": "Aug 13 – Sep 11", "total_credits": 380,
+          "by_action": [{ "action": "geo.lookup", "name": "Geocode Records", "credits": 370 },
+                        { "action": "other", "name": "Other", "credits": 10 }] },
+        { "label": "Sep 12 – Oct 11", "total_credits": 410,
+          "by_action": [{ "action": "geo.lookup", "name": "Geocode Records", "credits": 410 }] },
+        { "label": "Oct 12 – present", "total_credits": 96,
+          "by_action": [{ "action": "geo.lookup", "name": "Geocode Records", "credits": 96 }] }
+      ]
     },
     // Computed AT READ TIME (no cron). upgrade_recommended when the install
     // bought >= 3 additional-credit packs this period OR last period's total
@@ -129,6 +149,14 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     //                "not in use"; event-backed features are also spared when
     //                the events read fails); {key, name, docs_url, rationale}
     //                — docs_url/rationale may be null/"".
+    //                RECOMMENDATION BUCKETS (1.27.0): a row MAY be a BUCKET
+    //                standing in for a set of related features (e.g. ATS's
+    //                "chrome_extension" row replaces four extension-flavored
+    //                feature rows). Same wire shape — key/name/docs_url/
+    //                rationale/ctas — so NO renderer change: bucket keys share
+    //                the not_in_use key namespace (the registry validator
+    //                rejects collisions). Emitted only when no member feature
+    //                shows usage; hidden once any member is used.
     // DEGRADATION: the block is ABSENT on older backends, legacy installs,
     // and apps with no feature registry — ui-shared renders NOTHING (never an
     // empty box). A fresh install gets most_used: [] and the full detectable

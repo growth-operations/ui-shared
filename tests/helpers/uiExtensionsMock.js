@@ -24,6 +24,7 @@ export const logger = {
 export const Accordion = marker("Accordion");
 export const Alert = marker("Alert");
 export const AutoGrid = marker("AutoGrid");
+export const BarChart = marker("BarChart");
 export const Box = marker("Box");
 export const Button = marker("Button");
 export const ButtonRow = marker("ButtonRow");
