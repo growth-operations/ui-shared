@@ -132,6 +132,146 @@ describe("resolvePeriodComparison", () => {
     });
     expect(view.last.byAction).toEqual([{ action: "Run", credits: 5 }]);
   });
+
+  it("no periods key → legacy kind (old backends keep the column layout)", () => {
+    const view = resolvePeriodComparison({
+      last_period: period("Sep 2026", 10),
+      current_period: period("Oct 2026", 3),
+    });
+    expect(view.kind).toBe("legacy");
+    expect(view.chart).toBeUndefined();
+    expect(view.last.total).toBe(10);
+  });
+
+  it("malformed periods → legacy kind, never a crash", () => {
+    const legacy = {
+      last_period: period("Sep 2026", 10),
+      current_period: period("Oct 2026", 3),
+    };
+    for (const bad of [[], "nope", [{}], [{ label: 42 }]]) {
+      expect(resolvePeriodComparison({ ...legacy, periods: bad }).kind).toBe("legacy");
+    }
+    // A missing/non-array by_action is NOT malformed — it normalizes to [].
+    expect(
+      resolvePeriodComparison({ ...legacy, periods: [{ label: "x", by_action: "nope" }] }).kind
+    ).toBe("periods");
+  });
+});
+
+describe("resolvePeriodComparison — periods chart view", () => {
+  const slice = (name, credits, action) => ({ action: action ?? name.toLowerCase(), name, credits });
+  const block = (periods) => ({
+    last_period: { label: "Sep 1 – Sep 30", total_credits: 31, by_action: [] },
+    current_period: { label: "Oct 1 – present", total_credits: 5, by_action: [] },
+    periods,
+  });
+
+  it("builds long-format rows period-major, oldest first", () => {
+    const view = resolvePeriodComparison(
+      block([
+        { label: "Aug 2 – Aug 31", total_credits: 7, by_action: [slice("Candidate Fit Scores", 7)] },
+        {
+          label: "Sep 1 – Sep 30",
+          total_credits: 31,
+          by_action: [slice("Candidate Pool Scoring", 21), slice("Resume Parsing", 10)],
+        },
+        { label: "Oct 1 – present", total_credits: 5, by_action: [slice("Resume Parsing", 5)] },
+      ])
+    );
+    expect(view.kind).toBe("periods");
+    expect(view.chart.labels).toEqual(["Aug 2 – Aug 31", "Sep 1 – Sep 30", "Oct 1 – present"]);
+    expect(view.chart.rows).toEqual([
+      { period: "Aug 2 – Aug 31", feature: "Candidate Fit Scores", credits: 7 },
+      { period: "Sep 1 – Sep 30", feature: "Candidate Pool Scoring", credits: 21 },
+      { period: "Sep 1 – Sep 30", feature: "Resume Parsing", credits: 10 },
+      { period: "Oct 1 – present", feature: "Resume Parsing", credits: 5 },
+    ]);
+  });
+
+  it("assigns palette colors over the alphabetical union; Other pinned", () => {
+    const view = resolvePeriodComparison(
+      block([
+        {
+          label: "Sep 1 – Sep 30",
+          total_credits: 31,
+          by_action: [slice("Resume Parsing", 10), slice("Candidate Pool Scoring", 21)],
+        },
+        { label: "Oct 1 – present", total_credits: 5, by_action: [slice("Other", 5, "other")] },
+      ])
+    );
+    expect(view.chart.colors).toEqual({
+      "Candidate Pool Scoring": "orange",
+      "Resume Parsing": "aqua",
+      Other: "darkOrange",
+    });
+  });
+
+  it("zero-usage periods zero-fill one row so the bar still renders", () => {
+    const view = resolvePeriodComparison(
+      block([
+        { label: "Sep 1 – Sep 30", total_credits: 0, by_action: [] },
+        { label: "Oct 1 – present", total_credits: 5, by_action: [slice("Resume Parsing", 5)] },
+      ])
+    );
+    expect(view.chart.rows).toEqual([
+      // The filler borrows the first named slice — no phantom legend entry.
+      { period: "Sep 1 – Sep 30", feature: "Resume Parsing", credits: 0 },
+      { period: "Oct 1 – present", feature: "Resume Parsing", credits: 5 },
+    ]);
+  });
+
+  it("every period empty → filler falls back to Other", () => {
+    const view = resolvePeriodComparison(
+      block([
+        { label: "Sep 1 – Sep 30", total_credits: 0, by_action: [] },
+        { label: "Oct 1 – present", total_credits: 0, by_action: [] },
+      ])
+    );
+    expect(view.chart.rows).toEqual([
+      { period: "Sep 1 – Sep 30", feature: "Other", credits: 0 },
+      { period: "Oct 1 – present", feature: "Other", credits: 0 },
+    ]);
+  });
+
+  it("caption preserves the per-period totals line", () => {
+    const view = resolvePeriodComparison(
+      block([
+        { label: "Sep 1 – Sep 30", total_credits: 31, by_action: [slice("Resume Parsing", 31)] },
+        { label: "Oct 1 – present", total_credits: 1, by_action: [slice("Resume Parsing", 1)] },
+      ])
+    );
+    expect(view.chart.caption).toBe("Sep 1 – Sep 30: 31 credits · Oct 1 – present: 1 credit");
+  });
+
+  it("falls back to the raw action when the server sent no name", () => {
+    const view = resolvePeriodComparison(
+      block([
+        {
+          label: "Sep 1 – Sep 30",
+          total_credits: 3,
+          by_action: [{ action: "geo.lookup", credits: 3 }],
+        },
+        { label: "Oct 1 – present", total_credits: 0, by_action: [] },
+      ])
+    );
+    expect(view.chart.rows[0]).toEqual({
+      period: "Sep 1 – Sep 30",
+      feature: "geo.lookup",
+      credits: 3,
+    });
+  });
+
+  it("legacy last/current/maxTotal still resolve alongside the chart", () => {
+    const view = resolvePeriodComparison(
+      block([
+        { label: "Sep 1 – Sep 30", total_credits: 31, by_action: [slice("Resume Parsing", 31)] },
+        { label: "Oct 1 – present", total_credits: 5, by_action: [] },
+      ])
+    );
+    expect(view.last.total).toBe(31);
+    expect(view.current.total).toBe(5);
+    expect(view.maxTotal).toBe(31);
+  });
 });
 
 // Dual-read helpers: base-hosted backends nest these blocks under

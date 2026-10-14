@@ -70,13 +70,81 @@ export function planFitOf(state) {
 
 // --- Period comparison ------------------------------------------------------
 
+// The stacked chart's slice palette, in assignment order. HubSpot's chart
+// `colors` map takes NAMED palette colors only (hex values are not in the
+// ChartColor union). "Other" — the server-side fold of every slice past the
+// top 7 — is pinned to darkOrange so folding never reshuffles the named
+// slices' colors.
+const CHART_PALETTE = ["orange", "aqua", "purple", "yellow", "pink", "blue", "green"];
+const OTHER_SLICE = "Other";
+const OTHER_SLICE_COLOR = "darkOrange";
+
+// The chart payload off the additive `periods` key (2–3 billing-period
+// windows, oldest → newest, friendly slice names). Returns:
+//   { rows, colors, labels, caption }
+// rows    — long-format [{period, feature, credits}], period-major
+//           oldest→newest, ready for BarChart's category x-axis. A zero-usage
+//           period contributes ONE 0-credit row so its bar renders empty
+//           instead of the category collapsing off the x-axis; the filler
+//           borrows the first named slice so the legend gains no phantom
+//           entry.
+// colors  — {featureName: paletteColor} over the alphabetical union of slice
+//           names across ALL periods (the same feature keeps its color across
+//           bars); "Other" pinned to darkOrange.
+// caption — the per-period totals line ("Sep 1 – Sep 30: 210 credits · …")
+//           preserving what the legacy progress bars showed.
+// Returns null for a missing/malformed `periods` (the caller falls back to
+// the legacy two-column rendering).
+function resolvePeriodsChart(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) return null;
+  const normd = [];
+  for (const p of periods) {
+    if (!p || typeof p !== "object" || typeof p.label !== "string") return null;
+    const slices = Array.isArray(p.by_action)
+      ? p.by_action
+          .filter((a) => a && (a.name ?? a.action) != null)
+          .map((a) => ({ name: a.name ?? a.action, credits: a.credits ?? 0 }))
+      : [];
+    normd.push({ label: p.label, total: p.total_credits ?? 0, slices });
+  }
+
+  const names = new Set();
+  normd.forEach((p) => p.slices.forEach((s) => names.add(s.name)));
+  const sorted = [...names].filter((n) => n !== OTHER_SLICE).sort();
+  const colors = {};
+  sorted.forEach((n, i) => {
+    colors[n] = CHART_PALETTE[i % CHART_PALETTE.length];
+  });
+  colors[OTHER_SLICE] = OTHER_SLICE_COLOR;
+
+  const filler = sorted[0] ?? OTHER_SLICE;
+  const rows = [];
+  normd.forEach((p) => {
+    if (p.slices.length === 0) {
+      rows.push({ period: p.label, feature: filler, credits: 0 });
+    } else {
+      p.slices.forEach((s) =>
+        rows.push({ period: p.label, feature: s.name, credits: s.credits })
+      );
+    }
+  });
+
+  const caption = normd
+    .map((p) => `${p.label}: ${p.total} ${p.total === 1 ? "credit" : "credits"}`)
+    .join(" · ");
+  return { rows, colors, labels: normd.map((p) => p.label), caption };
+}
+
 // Resolve the period_comparison block (null until the install has one full
-// closed period) into render-ready shape:
-//   { last, current, maxTotal } where each period is
-//   { label, total, byAction: [{ action, credits }] } and maxTotal is the
-//   shared bar denominator (so the two bars are visually comparable; >= 1 so
-//   a pair of zero periods never divides by zero).
-// Returns null when the block or either period is missing.
+// closed period) into render-ready shape. Discriminated on `kind`:
+//   { kind: "periods", chart, last, current, maxTotal } — the backend shipped
+//     the additive `periods` chart payload; render the stacked BarChart.
+//   { kind: "legacy", last, current, maxTotal } — pre-periods backend; render
+//     the two-column progress-bar layout.
+// `last` / `current` are { label, total, byAction: [{ action, credits }] }
+// and maxTotal the shared bar denominator (>= 1 so a pair of zero periods
+// never divides by zero). Returns null when the block or either legacy period
+// is missing.
 export function resolvePeriodComparison(periodComparison) {
   if (!periodComparison || typeof periodComparison !== "object") return null;
   const norm = (p) => {
@@ -92,11 +160,14 @@ export function resolvePeriodComparison(periodComparison) {
   const last = norm(periodComparison.last_period);
   const current = norm(periodComparison.current_period);
   if (!last || !current) return null;
-  return {
+  const base = {
     last,
     current,
     maxTotal: Math.max(last.total, current.total, 1),
   };
+  const chart = resolvePeriodsChart(periodComparison.periods);
+  if (!chart) return { kind: "legacy", ...base };
+  return { kind: "periods", chart, ...base };
 }
 
 // Same nested-vs-top-level duality as planFitOf: base serves
