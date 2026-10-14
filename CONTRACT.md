@@ -287,6 +287,26 @@ in @hubspot/ui-extensions (it's in the pages `actions` object, present since
 Use `cta_url` (external/full deep link) only for genuinely external targets
 (e.g. the settings extension deep link), which render as an external `Link`.
 
+## Usage tab chart — days vs billing periods
+
+`<UsageTab chart="days" | "billingPeriods">` (default `"days"`):
+
+- **`days`** (legacy default): rolling-day LineChart fed by
+  `GET {basePath}?portalId=&days=N` → `{series: [{date, credits}], used_in_window, granted, remaining}`
+  (zero-filled, oldest first).
+- **`billingPeriods`** (ATS; the shared `<BillingPeriodUsage>` component):
+  stacked BarChart, one bar per billing period, stacks = features, lookback
+  Select = Current / Last 2 / 3 / 6 / 12. Fed by
+  `GET {basePath}?portalId=&periods=N` → `{series: [{period, feature, credits}], used_in_window, granted, remaining}`
+  (SPARSE — no zero-filled bars; `period` is the backend's display label,
+  e.g. "Oct 12 – Nov 12"; category x-axis renders in data order, so the
+  backend returns oldest-first). Window math + bucketing live in common
+  (`billing_period_windows`, `CreditService.usage_series_by_period`,
+  common v1.35.0+). Non-standard hosts pass `fetchUsage={(periods) => …}`
+  instead of `basePath`/`portalId` (the GOAA internal Installation card keys
+  its endpoint by installation id); `showStats={false}` drops the stats tile
+  for hosts with their own credit summary.
+
 ## Top banner (BillingBanner) — the ONE banner
 
 Andrew 2026-10-13: a single banner at the top of EVERY page (mounted by the

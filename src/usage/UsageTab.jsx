@@ -30,6 +30,7 @@ import {
 import { useStrictModeEffect } from "../lib/useStrictModeEffect";
 import { creditsBlockOf } from "../lib/creditDisplay";
 import { CreditMeter } from "../home/CreditMeter";
+import { BillingPeriodUsage } from "./BillingPeriodUsage";
 
 const DEFAULT_BASE_PATH = "/api/v1/usage";
 
@@ -45,13 +46,16 @@ const WINDOW_OPTIONS = [
 // (base-hosted apps pass both). appName: chart copy. state: the /v1/home
 // payload (optional) — when present, the credit meter renders at the TOP of
 // the tab (Andrew's 2026-10 feedback: the meter moved off Home); without it
-// the tab is chart-only, same as before.
+// the tab is chart-only, same as before. chart: "days" (default, rolling-day
+// LineChart) or "billingPeriods" (stacked BarChart bucketed by billing period
+// — requires the backend's ?periods= mode, shipped in common v1.35.0).
 export function UsageTab({
   context,
   basePath = DEFAULT_BASE_PATH,
   portalId,
   appName = "this app",
   state = null,
+  chart = "days",
 }) {
   const [days, setDays] = useState("30");
 
@@ -68,6 +72,31 @@ export function UsageTab({
         />
       )}
 
+      {chart === "billingPeriods" ? (
+        <BillingPeriodUsage
+          context={context}
+          basePath={basePath}
+          portalId={portalId}
+          appName={appName}
+          title="Usage"
+        />
+      ) : (
+        <DaysUsage
+          days={days}
+          onDaysChange={setDays}
+          context={context}
+          basePath={basePath}
+          portalId={portalId}
+          appName={appName}
+        />
+      )}
+    </Flex>
+  );
+}
+
+function DaysUsage({ days, onDaysChange, context, basePath, portalId, appName }) {
+  return (
+    <>
       <Flex direction="row" justify="between" align="end">
         <Heading>Usage</Heading>
         <Select
@@ -75,7 +104,7 @@ export function UsageTab({
           name="time-period"
           options={WINDOW_OPTIONS}
           value={days}
-          onChange={setDays}
+          onChange={onDaysChange}
         />
       </Flex>
 
@@ -95,7 +124,7 @@ export function UsageTab({
         appName={appName}
         days={days}
       />
-    </Flex>
+    </>
   );
 }
 
