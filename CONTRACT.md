@@ -133,6 +133,12 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // and apps with no feature registry — ui-shared renders NOTHING (never an
     // empty box). A fresh install gets most_used: [] and the full detectable
     // catalog in not_in_use.
+    // RENDERING CAP (1.23.0): RecommendedTile renders not_in_use whole when
+    // <= 4 entries; longer lists show a deterministic 3-per-day rotating
+    // window seeded by the UTC date alone (pickDailyRecommendations — no
+    // per-portal state, no backend involvement) + a "new picks daily"
+    // microcopy. Link label is "Learn more →" (docs_url usually points at
+    // the app's single setup guide, not a per-feature article).
     "feature_usage": {
       "most_used": [
         { "key": "geocode_record", "name": "Geocode Records",

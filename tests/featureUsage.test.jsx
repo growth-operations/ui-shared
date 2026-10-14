@@ -352,3 +352,66 @@ describe("AppHome + FeatureUsage", () => {
     expect(findAll(complete, "FeatureUsage")).toHaveLength(1);
   });
 });
+
+// --- Recommendation rotation (2026-10-13: the 13-feature ATS firehose) ------
+import {
+  pickDailyRecommendations,
+  recommendationsRotated,
+  rotationDayHash,
+  RECOMMENDATION_PICK_COUNT,
+  RECOMMENDATION_WHOLE_LIST_MAX,
+} from "../src/lib/featureUsage";
+
+const feature = (key) => ({ key, name: `Feature ${key}`, docsUrl: null, rationale: "" });
+const listOf = (n) => Array.from({ length: n }, (_, i) => feature(`f${i}`));
+
+describe("pickDailyRecommendations", () => {
+  it("returns the whole list when it fits (small registries unchanged)", () => {
+    for (const n of [0, 1, RECOMMENDATION_WHOLE_LIST_MAX]) {
+      expect(pickDailyRecommendations(listOf(n), "2026-10-13")).toEqual(listOf(n));
+    }
+  });
+
+  it("returns exactly PICK_COUNT items from a long list, in registry order", () => {
+    // djb2("2026-10-13") % 13 === 2
+    const picks = pickDailyRecommendations(listOf(13), "2026-10-13");
+    expect(picks.map((f) => f.key)).toEqual(["f2", "f3", "f4"]);
+    expect(picks).toHaveLength(RECOMMENDATION_PICK_COUNT);
+  });
+
+  it("is deterministic within a day and advances the window the next day", () => {
+    const a = pickDailyRecommendations(listOf(13), "2026-10-14");
+    const b = pickDailyRecommendations(listOf(13), "2026-10-14");
+    expect(a).toEqual(b);
+    // djb2 of consecutive date strings increments by 1 -> window slides by 1
+    const next = pickDailyRecommendations(listOf(13), "2026-10-15");
+    expect(next.map((f) => f.key)).toEqual(["f4", "f5", "f6"]);
+  });
+
+  it("wraps around the end of the list", () => {
+    // djb2("2026-10-26") % 13 === 12 -> [12, 0, 1]
+    const picks = pickDailyRecommendations(listOf(13), "2026-10-26");
+    expect(picks.map((f) => f.key)).toEqual(["f12", "f0", "f1"]);
+  });
+
+  it("handles non-array input defensively", () => {
+    expect(pickDailyRecommendations(null, "2026-10-13")).toEqual([]);
+    expect(pickDailyRecommendations(undefined, "2026-10-13")).toEqual([]);
+  });
+});
+
+describe("recommendationsRotated", () => {
+  it("is true only when the list overflows the whole-list max", () => {
+    expect(recommendationsRotated(listOf(RECOMMENDATION_WHOLE_LIST_MAX))).toBe(false);
+    expect(recommendationsRotated(listOf(RECOMMENDATION_WHOLE_LIST_MAX + 1))).toBe(true);
+    expect(recommendationsRotated(null)).toBe(false);
+  });
+});
+
+describe("rotationDayHash", () => {
+  it("is a stable unsigned 32-bit hash of the date string", () => {
+    expect(rotationDayHash("2026-10-13")).toBe(2772548014);
+    expect(rotationDayHash("2026-10-13")).toBe(rotationDayHash("2026-10-13"));
+    expect(rotationDayHash("2026-10-13")).not.toBe(rotationDayHash("2026-10-14"));
+  });
+});

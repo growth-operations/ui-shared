@@ -50,7 +50,12 @@ export {
   SUPPORT_FOOTER,
 } from "./lib/format";
 export { useStrictModeEffect } from "./lib/useStrictModeEffect";
-export { resolveFeatureUsage, featureUsageOf } from "./lib/featureUsage";
+export {
+  resolveFeatureUsage,
+  featureUsageOf,
+  pickDailyRecommendations,
+  recommendationsRotated,
+} from "./lib/featureUsage";
 export {
   hasTopUpBank,
   creditsBlockOf,
