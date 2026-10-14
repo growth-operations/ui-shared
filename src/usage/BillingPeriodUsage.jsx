@@ -76,7 +76,16 @@ export function makeUsageFetcher({ context, basePath = DEFAULT_BASE_PATH, portal
 
 // Hook-free presentational core (exported for tests): stats + stacked chart
 // from an already-loaded payload.
-export function BillingPeriodUsageView({ data, periods, appName, showStats }) {
+export function BillingPeriodUsageView({
+  data,
+  periods,
+  appName,
+  showStats,
+  emptyTitle = "No usage in this window",
+  // Customer-facing default; internal hosts (the GOAA card) override — their
+  // viewer isn't the user, so "you run a metered action" reads wrong there.
+  emptyBody = null,
+}) {
   const series = data?.series ?? [];
   const usedInWindow = data?.used_in_window ?? 0;
   const remaining = data?.remaining;
@@ -96,10 +105,10 @@ export function BillingPeriodUsageView({ data, periods, appName, showStats }) {
       )}
 
       {series.length === 0 ? (
-        <EmptyState title="No usage in this window" layout="vertical">
+        <EmptyState title={emptyTitle} layout="vertical">
           <Text>
-            Once you run a metered {appName} action, your credit usage shows
-            here by billing period. Try a longer lookback.
+            {emptyBody ??
+              `Once you run a metered ${appName} action, your credit usage shows here by billing period. Try a longer lookback.`}
           </Text>
         </EmptyState>
       ) : (
@@ -133,6 +142,8 @@ export function BillingPeriodUsage({
   title = "Usage",
   titleAs = "heading", // "text" for CRM-card contexts (bold Text, not Heading)
   showStats = true,
+  emptyTitle,
+  emptyBody,
 }) {
   const [periods, setPeriods] = useState("1");
   const fetcher = fetchUsage ?? makeUsageFetcher({ context, basePath, portalId });
@@ -167,12 +178,14 @@ export function BillingPeriodUsage({
         fetchUsage={fetcher}
         appName={appName}
         showStats={showStats}
+        emptyTitle={emptyTitle}
+        emptyBody={emptyBody}
       />
     </Flex>
   );
 }
 
-function BillingPeriodContent({ periods, fetchUsage, appName, showStats }) {
+function BillingPeriodContent({ periods, fetchUsage, appName, showStats, emptyTitle, emptyBody }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -213,6 +226,8 @@ function BillingPeriodContent({ periods, fetchUsage, appName, showStats }) {
       periods={periods}
       appName={appName}
       showStats={showStats}
+      emptyTitle={emptyTitle}
+      emptyBody={emptyBody}
     />
   );
 }
