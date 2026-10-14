@@ -174,14 +174,15 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // contacts and applications). For card-backed features "never used"
     // almost always means "the card was never added to the record layout", so
     // the setup step beats another docs pointer.
-    // PER-ITEM ADMIN GATE (1.28.0): each item MAY carry "admin_only": false
-    // to mark a PER-USER surface (install the Chrome extension, open the
-    // in-app extension page) that renders for EVERY viewer. A MISSING marker
-    // means admin-only: those items render ONLY for user.is_super_admin —
-    // their targets are HubSpot permission walls (the layout editor above
-    // all), and a non-admin clicking into one is worse than no link. Old
-    // backends emit no marker, so the blanket super-admin gate is preserved
-    // for them.
+    // PER-ITEM ADMIN MARKER (1.28.0; DE-GATED 1.29.0): each item MAY carry
+    // "admin_only": false to mark a PER-USER surface (install the Chrome
+    // extension, open the in-app extension page). ALL items render for EVERY
+    // viewer (1.29.0, Jasper 2026-10-14 — hiding admin CTAs kept non-admins
+    // from knowing what to ask their admin for, and HubSpot permissions are
+    // more granular than super-admin); the marker only controls whether a
+    // "(Super Admin)" hint is appended for non-admin viewers (missing marker
+    // = admin surface = hinted). Before 1.29.0 the marker was a hard gate:
+    // unmarked items rendered only for user.is_super_admin.
     // LEARN MORE REMOVED (1.26.0): the docs_url "Learn more →" link is NOT
     // rendered for now (Jasper 2026-10-14 — all docs links point at the same
     // single setup guide: noise until per-feature articles exist). docs_url

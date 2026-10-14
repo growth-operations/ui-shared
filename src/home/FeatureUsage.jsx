@@ -61,19 +61,25 @@ function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
       <Flex direction="column" gap="small">
         <Text format={{ fontWeight: "bold" }}>Recommended to explore</Text>
         {picks.map((f) => {
-          // Setup CTAs are gated PER ITEM (1.28.0): adminOnly items point at
-          // HubSpot permission-wall surfaces (the layout editor above all) —
-          // super admins only, since a non-admin clicking into a permission
-          // wall is worse than no link. Items marked adminOnly: false are
-          // per-user surfaces (install the Chrome extension, open the in-app
-          // extension page) and render for everyone. Old backends emit no
-          // marker → adminOnly defaults true → the blanket gate is preserved.
+          // Setup CTAs render for EVERYONE (1.29.0, Jasper 2026-10-14: "why
+          // gate so much on super admin?"). The old blanket super-admin gate
+          // assumed the targets were admin-only surfaces — but HubSpot
+          // permissions are granular (CRM customization ≠ super admin), and
+          // hiding the CTA kept non-admins from even knowing what to ask
+          // their admin for. adminOnly items instead carry a "(Super Admin)"
+          // hint for non-admin viewers, so the permission wall is never a
+          // blind click. The adminOnly marker still distinguishes the two
+          // surface kinds; old backends emit no marker → every item gets the
+          // hint for non-admins (conservative, and matches the old gate's
+          // assumption that the targets are admin surfaces).
           //
           // "Learn more →" (docs_url) intentionally NOT rendered (Jasper
           // 2026-10-14): every feature's docs_url points at the same single
           // setup guide — noise until per-feature articles exist. docs_url
           // stays in the wire contract; re-enabling is a one-line revert.
-          const ctas = f.ctas.filter((c) => !c.adminOnly || isSuperAdmin);
+          const ctas = f.ctas;
+          const hint = (c) =>
+            c.adminOnly && !isSuperAdmin ? " (Super Admin)" : "";
           return (
             <Flex key={f.key} direction="column" gap="extra-small">
               <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>
@@ -81,7 +87,8 @@ function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
               {ctas.map((cta) =>
                 cta.url ? (
                   <Link key={cta.label} href={{ url: cta.url, external: true }}>
-                    {cta.label} →
+                    {cta.label}
+                    {hint(cta)} →
                   </Link>
                 ) : onNavigate ? (
                   <Button
@@ -90,6 +97,7 @@ function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
                     onClick={() => onNavigate(cta.route)}
                   >
                     {cta.label}
+                    {hint(cta)}
                   </Button>
                 ) : null
               )}

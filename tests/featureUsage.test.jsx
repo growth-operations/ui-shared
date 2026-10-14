@@ -517,9 +517,11 @@ describe("FeatureUsage setup CTAs", () => {
     expect(textOf(links[1])).toContain("Add the card to applications");
   });
 
-  it("non-admins get no ADMIN links — name + rationale only", () => {
-    // Learn more is gone too (1.26.0), so a non-admin sees nothing clickable
-    // when every CTA is admin-gated (the default / old-backend behavior).
+  it("non-admins see admin CTAs too, with a (Super Admin) hint (1.29.0)", () => {
+    // The blanket gate is gone: hiding the CTA kept non-admins from knowing
+    // what to ask their admin for, and HubSpot permissions are granular
+    // (CRM customization ≠ super admin). The hint prevents a blind click
+    // into a permission wall.
     const entry = {
       key: "rs",
       name: "Resume Summaries",
@@ -532,18 +534,33 @@ describe("FeatureUsage setup CTAs", () => {
       { state: { feature_usage: ctaBlock(entry) } }, // no user block at all
     ]) {
       const tree = renderComponent(FeatureUsage, { state });
-      expect(findAll(tree, "Link")).toHaveLength(0);
-      expect(findAll(tree, "Button")).toHaveLength(0);
+      const links = findAll(tree, "Link");
+      expect(links).toHaveLength(1);
+      expect(textOf(links[0])).toBe("Add the card (Super Admin) →");
       const text = textOf(tree);
       expect(text).toContain("Resume Summaries");
       expect(text).toContain("Read a one-paragraph AI summary instead.");
-      expect(text).not.toContain("Add the card");
     }
   });
 
-  it("non-admins DO see ctas marked admin_only: false (per-user surfaces)", () => {
+  it("super admins see admin CTAs WITHOUT the hint", () => {
+    const tree = renderComponent(FeatureUsage, {
+      state: adminState(
+        ctaBlock({
+          key: "rs",
+          name: "Resume Summaries",
+          ctas: [{ label: "Add the card", url: "https://app.hubspot.com/layout-editor/1/x" }],
+        })
+      ),
+    });
+    const links = findAll(tree, "Link");
+    expect(links).toHaveLength(1);
+    expect(textOf(links[0])).toBe("Add the card →");
+  });
+
+  it("non-admins see per-user ctas (admin_only: false) with NO hint", () => {
     // Installing the Chrome extension is a per-user action — the marker
-    // bypasses the super-admin gate, per item (Jasper 2026-10-14).
+    // suppresses the (Super Admin) hint, per item (Jasper 2026-10-14).
     const onNavigate = vi.fn();
     const entry = {
       key: "ext",
@@ -556,7 +573,7 @@ describe("FeatureUsage setup CTAs", () => {
           admin_only: false,
         },
         { label: "Open the extension page", route: "/extension", admin_only: false },
-        // A gated sibling stays hidden for the same viewer.
+        // An admin-surface sibling renders too — with the hint.
         { label: "Add the card", url: "https://app.hubspot.com/layout-editor/1/x" },
       ],
     };
@@ -565,14 +582,14 @@ describe("FeatureUsage setup CTAs", () => {
       onNavigate,
     });
     const links = findAll(tree, "Link");
-    expect(links).toHaveLength(1);
-    expect(textOf(links[0])).toContain("Install the Chrome extension");
+    expect(links).toHaveLength(2);
+    expect(textOf(links[0])).toBe("Install the Chrome extension →");
+    expect(textOf(links[1])).toBe("Add the card (Super Admin) →");
     const buttons = findAll(tree, "Button");
     expect(buttons).toHaveLength(1);
-    expect(textOf(buttons[0])).toContain("Open the extension page");
+    expect(textOf(buttons[0])).toBe("Open the extension page");
     buttons[0].onClick();
     expect(onNavigate).toHaveBeenCalledWith("/extension");
-    expect(textOf(tree)).not.toContain("Add the card");
   });
 
   it("route items render a Button wired to onNavigate", () => {
