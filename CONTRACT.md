@@ -294,7 +294,7 @@ Use `cta_url` (external/full deep link) only for genuinely external targets
 - **`days`** (legacy default): rolling-day LineChart fed by
   `GET {basePath}?portalId=&days=N` → `{series: [{date, credits}], used_in_window, granted, remaining}`
   (zero-filled, oldest first).
-- **`billingPeriods`** (ATS; the shared `<BillingPeriodUsage>` component):
+- **`billingPeriods`** (the shared `<BillingPeriodUsage>` component):
   stacked BarChart, one bar per billing period, stacks = features, lookback
   Select = Current / Last 2 / 3 / 6 / 12. Fed by
   `GET {basePath}?portalId=&periods=N` → `{series: [{period, feature, credits}], used_in_window, granted, remaining}`
@@ -306,6 +306,12 @@ Use `cta_url` (external/full deep link) only for genuinely external targets
   instead of `basePath`/`portalId` (the GOAA internal Installation card keys
   its endpoint by installation id); `showStats={false}` drops the stats tile
   for hosts with their own credit summary.
+
+  Also mountable on HOME (v1.31.0): `<AppHome usageExplorer={{ context,
+  basePath, portalId }}>` swaps the fixed last-vs-current PeriodComparison
+  section for the explorer chart (ATS Home, 2026-10-14 — the ATS Usage tab
+  keeps the rolling-days LineChart). Hosts without a periods-capable
+  endpoint omit the prop.
 
 ## Top banner (BillingBanner) — the ONE banner
 
