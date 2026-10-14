@@ -7,6 +7,7 @@ import { SyncPulse } from "./SyncPulse";
 import { FeatureUsage } from "./FeatureUsage";
 import { PlanFitBanner } from "./PlanFitBanner";
 import { PeriodComparison } from "./PeriodComparison";
+import { BillingPeriodUsage } from "../usage/BillingPeriodUsage";
 import { FeatureNudges } from "./FeatureNudges";
 import { HelpfulLinks } from "./HelpfulLinks";
 
@@ -53,7 +54,14 @@ function ArchetypeTile({ state }) {
 //                  (it owns context.portal.id + the app's docs/support); it can
 //                  also come from a state.helpful_links block if the backend
 //                  builds one.
-export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
+//   usageExplorer — optional { context, basePath, portalId }: swap the fixed
+//                  last-vs-current PeriodComparison for the billing-period
+//                  explorer chart (BillingPeriodUsage, Current/Last 2/3/6/12
+//                  dropdown). Requires the host's usage endpoint to serve
+//                  ?periods= (common v1.35.0+ backends). Jasper 2026-10-14:
+//                  ATS Home uses this; the Usage tab keeps the rolling-days
+//                  LineChart.
+export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks, usageExplorer }) {
   if (!state) {
     return <LoadingSpinner showLabel label="Loading…" />;
   }
@@ -116,9 +124,25 @@ export function AppHome({ state, onNavigate, appName, onRetry, helpfulLinks }) {
 
       <ArchetypeTile state={state} />
 
-      {/* Post-checklist: the period-over-period comparison (null until the
-          install has one full closed period). */}
-      {onboardingComplete && <PeriodComparison state={state} />}
+      {/* Post-checklist: the period chart. Default is the fixed
+          period-over-period comparison (null until the install has one full
+          closed period); usageExplorer hosts get the billing-period explorer
+          instead (it self-fetches, so it renders its own empty state rather
+          than gating on a closed period). */}
+      {onboardingComplete &&
+        (usageExplorer ? (
+          <BillingPeriodUsage
+            context={usageExplorer.context}
+            basePath={usageExplorer.basePath}
+            portalId={usageExplorer.portalId}
+            appName={appName}
+            title="Usage over time"
+            titleAs="text"
+            showStats={false}
+          />
+        ) : (
+          <PeriodComparison state={state} />
+        ))}
 
       {/* Most used / recommended-to-explore (state.feature_usage) — renders
           nothing on backends without the block or for legacy installs. Gated

@@ -17,8 +17,14 @@ import {
   usageUrl,
   usedWindowLabel,
 } from "../src/usage/BillingPeriodUsage";
+import { AppHome } from "../src/home/AppHome";
 import { hubspot } from "@hubspot/ui-extensions";
-import { renderComponent, findAll, textOf } from "./helpers/render";
+import {
+  renderComponent,
+  renderShallow,
+  findAll,
+  textOf,
+} from "./helpers/render";
 
 const cell = (period, feature, credits) => ({ period, feature, credits });
 
@@ -141,5 +147,46 @@ describe("BillingPeriodUsageView", () => {
     expect(empty).toHaveLength(1);
     expect(empty[0].title).toBe("No usage in this window");
     expect(textOf(empty[0])).toContain("Try a longer lookback");
+  });
+});
+
+// AppHome's usageExplorer swap — ATS Home replaces the fixed last-vs-current
+// PeriodComparison with the billing-period explorer (Jasper 2026-10-14).
+// shallowResolve because AppHome's InstallProgress child is hookful.
+describe("AppHome usageExplorer swap", () => {
+  const cockpit = {
+    app: { name: "Applicant Tracking System", app_key: "applicant_tracking_system" },
+    activation: { status: "completed", complete: true, step: 5, total: 5, warnings: [] },
+    health: { level: "healthy", reasons: [] },
+    onboarding: {
+      complete: true,
+      steps: [
+        { key: "install", label: "Install", done: true },
+        { key: "plan", label: "Choose a plan", done: true, cta_route: "/billing" },
+      ],
+    },
+    nudges: [],
+    state: { period_comparison: { periods: [] } },
+  };
+
+  it("renders PeriodComparison by default", () => {
+    const tree = renderShallow(AppHome, { state: cockpit });
+    expect(findAll(tree, "PeriodComparison")).toHaveLength(1);
+    expect(findAll(tree, "BillingPeriodUsage")).toHaveLength(0);
+  });
+
+  it("swaps in BillingPeriodUsage when usageExplorer is provided", () => {
+    const usageExplorer = {
+      context: { portal: { id: 42 }, variables: {} },
+      basePath: "/v1/usage",
+      portalId: 42,
+    };
+    const tree = renderShallow(AppHome, { state: cockpit, usageExplorer });
+    expect(findAll(tree, "PeriodComparison")).toHaveLength(0);
+    const nodes = findAll(tree, "BillingPeriodUsage");
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].basePath).toBe("/v1/usage");
+    expect(nodes[0].showStats).toBe(false);
+    expect(nodes[0].title).toBe("Usage over time");
   });
 });
