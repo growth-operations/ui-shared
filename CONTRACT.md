@@ -193,7 +193,9 @@ contract serves all archetypes; components branch on `entitlement.mode`.
   // ARCHETYPE ACTIVITY TILE — at most ONE present.
   "sync_pulse":   { "last_sync_at": "...", "records_synced": 1240, "records_failed": 2, "label": "Contact sync" }, // big_app
   "credit_meter": { "granted": 100, "used": 37, "remaining": 63, "recent": [ { "at": "...", "amount": 3, "action": "Parsed 3 line items on Deal Acme" } ] }, // credit — `recent` from the credit ledger (common.entitlements.CreditService.recent_usage → build_credit_meter); each entry projects a metered debit (action label + amount + time), so customers see itemized usage in-app.
-  "pipeline":     { "open_jobs": 4, "applications_by_stage": { "applied": 12, "interview": 3 }, "outstanding_scorecards": 5 }, // ats — fed by ATS /v1/home off the account's stats counters (approximate for pre-existing records until they churn)
+  // RETIRED (1.25.0): the ats "pipeline" tile — product decision 2026-10-14;
+  // it duplicated the dedicated tabs and its cold-started counters read wrong
+  // until churn. Backends may still emit "pipeline"; ui-shared ignores it.
 
   // PLANS — credit apps only. The pickable upgrade path for the Billing tab,
   // built from the Stripe catalog mirror (common.billing.catalog.get_plans).
@@ -280,7 +282,7 @@ emitted `grant_expires_at`; paid/healthy accounts render no banner.
   (trial: is_entitled status; credits: remaining > 0).
 - Components are presentational: all app-specific content (onboarding steps, nudges, health
   reasons) is computed server-side. The package never hardcodes app logic.
-- Optional blocks (health, sync_pulse, credit_meter, pipeline, onboarding, nudges) may be
+- Optional blocks (health, sync_pulse, credit_meter, onboarding, nudges) may be
   absent; components render nothing when their block is missing.
 - Backend engine lives in `common` (operates on the Account doc + per-app config/rules);
   each app exposes `GET /api/v1/home` that calls it. trial_subscription mode maps onto the
