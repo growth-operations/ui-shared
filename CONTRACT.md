@@ -137,19 +137,22 @@ contract serves all archetypes; components branch on `entitlement.mode`.
     // <= 4 entries; longer lists show a deterministic 3-per-day rotating
     // window seeded by the UTC date alone (pickDailyRecommendations — no
     // per-portal state, no backend involvement) + a "new picks daily"
-    // microcopy. Link label is "Learn more →" (docs_url usually points at
-    // the app's single setup guide, not a per-feature article).
-    // SETUP CTAS (1.24.0): not_in_use entries MAY carry a cta (same
-    // cta_label/cta_url/cta_route vocabulary as nudges) — the "go do the
-    // thing" action for an unused feature (deep link into the HubSpot layout
-    // editor to add the feature's card, a store listing, or an in-app route).
-    // For card-backed features "never used" almost always means "the card
-    // was never added to the record layout", so the setup step beats another
-    // docs pointer. Rendered ONLY for user.is_super_admin — the targets are
-    // admin-only surfaces (a non-admin clicking into a HubSpot permission
-    // wall is worse than no link); "Learn more" stays as the secondary link.
-    // Backends without CTAs (base-hosted apps today) emit nothing and render
-    // exactly as before.
+    // microcopy.
+    // SETUP CTAS (1.24.0; LIST shape 1.26.0): not_in_use entries MAY carry
+    // "ctas": [{ "label", "url"|"route" }, ...] — the "go do the thing"
+    // actions for an unused feature (deep link into the HubSpot layout editor
+    // to add the feature's card, a store listing, or an in-app route). A LIST
+    // because one feature can surface in multiple places (e.g. a card on both
+    // contacts and applications). For card-backed features "never used"
+    // almost always means "the card was never added to the record layout", so
+    // the setup step beats another docs pointer. Rendered ONLY for
+    // user.is_super_admin — the targets are admin-only surfaces (a non-admin
+    // clicking into a HubSpot permission wall is worse than no link).
+    // LEARN MORE REMOVED (1.26.0): the docs_url "Learn more →" link is NOT
+    // rendered for now (Jasper 2026-10-14 — all docs links point at the same
+    // single setup guide: noise until per-feature articles exist). docs_url
+    // stays in the wire contract (reserved); re-enabling is a one-line revert.
+    // Backends without CTAs emit nothing and render name + rationale only.
     "feature_usage": {
       "most_used": [
         { "key": "geocode_record", "name": "Geocode Records",
@@ -159,9 +162,11 @@ contract serves all archetypes; components branch on `entitlement.mode`.
         { "key": "nearby_lists", "name": "Nearby Lists",
           "docs_url": "https://www.growth-operations.com/help-articles/geocoding-setup-guide",
           "rationale": "Build static lists of the records nearest to any location.",
-          "cta_label": "Add the Nearby Contacts card to office records",
-          "cta_url": "https://app.hubspot.com/layout-editor/{portal}/CRM_RECORD_PAGE/{object}/edit/HubspotProvided-CRM_RECORD_PAGE" }
-        // ...or { "cta_label": "Set up your careers site", "cta_route": "/careers-site" }
+          "ctas": [
+            { "label": "Add the Nearby Contacts card to office records",
+              "url": "https://app.hubspot.com/layout-editor/{portal}/CRM_RECORD_PAGE/{object}/edit/HubspotProvided-CRM_RECORD_PAGE" }
+          ] }
+        // ...or a route item: { "label": "Set up your careers site", "route": "/careers-site" }
       ]
     },
     // Health v2: "attention" (new — was only ever healthy/critical) when

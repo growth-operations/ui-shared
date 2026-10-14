@@ -65,9 +65,7 @@ describe("resolveFeatureUsage", () => {
         name: "Nearby Lists",
         docsUrl: "https://example.com/guide",
         rationale: "Build static lists of the records nearest to any location.",
-        ctaLabel: null,
-        ctaUrl: null,
-        ctaRoute: null,
+        ctas: [],
       },
     ]);
   });
@@ -101,9 +99,7 @@ describe("resolveFeatureUsage", () => {
         name: "K",
         docsUrl: null,
         rationale: "",
-        ctaLabel: null,
-        ctaUrl: null,
-        ctaRoute: null,
+        ctas: [],
       },
     ]);
   });
@@ -176,16 +172,15 @@ describe("FeatureUsage", () => {
     expect(text).not.toContain("credit");
   });
 
-  it("links each recommendation to its guide", () => {
+  it("renders no links for a recommendation without setup CTAs (Learn more removed)", () => {
+    // 1.26.0: the docs_url "Learn more →" link is gone (all docs links point
+    // at the same single setup guide — noise). A recommendation with no ctas
+    // renders name + rationale and NOTHING clickable.
     const tree = renderComponent(FeatureUsage, {
       state: { state: { feature_usage: block() } },
     });
-    const links = findAll(tree, "Link");
-    expect(links).toHaveLength(1);
-    expect(links[0].href).toEqual({
-      url: "https://example.com/guide",
-      external: true,
-    });
+    expect(findAll(tree, "Link")).toHaveLength(0);
+    expect(findAll(tree, "Button")).toHaveLength(0);
   });
 
   it("renders only the section that has rows", () => {
@@ -428,8 +423,9 @@ describe("rotationDayHash", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Setup CTAs on recommendations (1.24.0) — the "go do the thing" action
-// (layout editor / store / in-app route), super-admin gated.
+// Setup CTAs on recommendations (1.24.0; LIST shape 1.26.0) — the "go do the
+// thing" actions (layout editor / store / in-app route), super-admin gated.
+// 1.26.0 also removed the docs_url "Learn more →" link entirely.
 // ---------------------------------------------------------------------------
 
 describe("FeatureUsage setup CTAs", () => {
@@ -439,27 +435,34 @@ describe("FeatureUsage setup CTAs", () => {
     user: { is_super_admin: true },
   });
 
-  it("resolver passes cta fields through, nulls when absent", () => {
+  it("resolver passes well-formed ctas through, drops malformed items", () => {
     const view = resolveFeatureUsage({
       most_used: [],
       not_in_use: [
-        { key: "a", name: "A", cta_label: "Add it", cta_url: "https://x.test" },
-        { key: "b", name: "B" },
+        {
+          key: "a",
+          name: "A",
+          ctas: [
+            { label: "Add it", url: "https://x.test" },
+            { label: "Open it", route: "/x" },
+            { label: "", url: "https://no-label.test" }, // no label -> dropped
+            { label: "Both", url: "https://x.test", route: "/x" }, // both -> dropped
+            { label: "Neither" }, // neither -> dropped
+            "garbage",
+            null,
+          ],
+        },
+        { key: "b", name: "B" }, // no ctas key at all -> []
       ],
     });
-    expect(view.notInUse[0]).toMatchObject({
-      ctaLabel: "Add it",
-      ctaUrl: "https://x.test",
-      ctaRoute: null,
-    });
-    expect(view.notInUse[1]).toMatchObject({
-      ctaLabel: null,
-      ctaUrl: null,
-      ctaRoute: null,
-    });
+    expect(view.notInUse[0].ctas).toEqual([
+      { label: "Add it", url: "https://x.test" },
+      { label: "Open it", route: "/x" },
+    ]);
+    expect(view.notInUse[1].ctas).toEqual([]);
   });
 
-  it("super admin sees the url CTA first, docs link second", () => {
+  it("super admin sees every link of a multi-CTA feature", () => {
     const tree = renderComponent(FeatureUsage, {
       state: adminState(
         ctaBlock({
@@ -467,49 +470,58 @@ describe("FeatureUsage setup CTAs", () => {
           name: "Resume Summaries",
           docs_url: "https://example.com/guide",
           rationale: "r",
-          cta_label: "Add the card",
-          cta_url:
-            "https://app.hubspot.com/layout-editor/1/CRM_RECORD_PAGE/0-1/edit/HubspotProvided-CRM_RECORD_PAGE",
+          ctas: [
+            {
+              label: "Add the card to contacts",
+              url: "https://app.hubspot.com/layout-editor/1/CRM_RECORD_PAGE/0-1/edit/HubspotProvided-CRM_RECORD_PAGE",
+            },
+            {
+              label: "Add the card to applications",
+              url: "https://app.hubspot.com/layout-editor/1/CRM_RECORD_PAGE/1-5221559/edit/HubspotProvided-CRM_RECORD_PAGE",
+            },
+          ],
         })
       ),
     });
     const links = findAll(tree, "Link");
     expect(links).toHaveLength(2);
-    expect(links[0].href.url).toContain("layout-editor");
-    expect(textOf(links[0])).toContain("Add the card");
-    expect(links[1].href).toEqual({ url: "https://example.com/guide", external: true });
+    expect(links[0].href.url).toContain("/0-1/");
+    expect(textOf(links[0])).toContain("Add the card to contacts");
+    expect(links[1].href.url).toContain("/1-5221559/");
+    expect(textOf(links[1])).toContain("Add the card to applications");
   });
 
-  it("non-admins get no setup CTA — docs link only", () => {
+  it("non-admins get NO links at all — name + rationale only", () => {
+    // Learn more is gone too (1.26.0), so a non-admin sees nothing clickable.
     const entry = {
       key: "rs",
       name: "Resume Summaries",
       docs_url: "https://example.com/guide",
-      cta_label: "Add the card",
-      cta_url: "https://app.hubspot.com/layout-editor/1/x",
+      rationale: "Read a one-paragraph AI summary instead.",
+      ctas: [{ label: "Add the card", url: "https://app.hubspot.com/layout-editor/1/x" }],
     };
     for (const state of [
       { state: { feature_usage: ctaBlock(entry) }, user: { is_super_admin: false } },
       { state: { feature_usage: ctaBlock(entry) } }, // no user block at all
     ]) {
       const tree = renderComponent(FeatureUsage, { state });
-      const links = findAll(tree, "Link");
-      expect(links).toHaveLength(1);
-      expect(links[0].href.url).toBe("https://example.com/guide");
-      expect(textOf(tree)).not.toContain("Add the card");
+      expect(findAll(tree, "Link")).toHaveLength(0);
+      expect(findAll(tree, "Button")).toHaveLength(0);
+      const text = textOf(tree);
+      expect(text).toContain("Resume Summaries");
+      expect(text).toContain("Read a one-paragraph AI summary instead.");
+      expect(text).not.toContain("Add the card");
     }
   });
 
-  it("route CTAs render a Button wired to onNavigate", () => {
+  it("route items render a Button wired to onNavigate", () => {
     const onNavigate = vi.fn();
     const tree = renderComponent(FeatureUsage, {
       state: adminState(
         ctaBlock({
           key: "cs",
           name: "Careers Site",
-          docs_url: "https://example.com/guide",
-          cta_label: "Set up your careers site",
-          cta_route: "/careers-site",
+          ctas: [{ label: "Set up your careers site", route: "/careers-site" }],
         })
       ),
       onNavigate,
@@ -521,19 +533,22 @@ describe("FeatureUsage setup CTAs", () => {
     expect(onNavigate).toHaveBeenCalledWith("/careers-site");
   });
 
-  it("route CTA without onNavigate renders no button (docs link stays)", () => {
+  it("route item without onNavigate is skipped while a sibling url link still renders", () => {
     const tree = renderComponent(FeatureUsage, {
       state: adminState(
         ctaBlock({
           key: "cs",
           name: "Careers Site",
-          docs_url: "https://example.com/guide",
-          cta_label: "Set up your careers site",
-          cta_route: "/careers-site",
+          ctas: [
+            { label: "Set up your careers site", route: "/careers-site" },
+            { label: "Install the Chrome extension", url: "https://chromewebstore.google.com/detail/x" },
+          ],
         })
       ),
     });
     expect(findAll(tree, "Button")).toHaveLength(0);
-    expect(findAll(tree, "Link")).toHaveLength(1);
+    const links = findAll(tree, "Link");
+    expect(links).toHaveLength(1);
+    expect(textOf(links[0])).toContain("Install the Chrome extension");
   });
 });

@@ -12,9 +12,10 @@ import {
 //
 // Composition: most-used first (what this install actually runs on), then
 // the not-in-use catalog as "Recommended to explore" — each with its
-// one-line rationale and setup-guide link. Each section renders only when it
-// has rows, and the whole thing renders NOTHING when the block is absent
-// (older backends, legacy installs) — absence is never an empty box.
+// one-line rationale and (for super admins) its setup CTA links. Each
+// section renders only when it has rows, and the whole thing renders NOTHING
+// when the block is absent (older backends, legacy installs) — absence is
+// never an empty box.
 
 // Singular/plural label for a row's unit ("credits" | "events") — the wire
 // field is credits_or_events, so an event-denominated feature must not be
@@ -61,29 +62,34 @@ function RecommendedTile({ notInUse, isSuperAdmin, onNavigate }) {
         <Text format={{ fontWeight: "bold" }}>Recommended to explore</Text>
         {picks.map((f) => {
           // Setup CTAs point at admin-only surfaces (the layout editor above
-          // all) — show them to super admins only; everyone else keeps the
-          // docs link (a non-admin clicking into a HubSpot permission wall is
-          // worse than no link).
-          const showCta = isSuperAdmin && f.ctaLabel && (f.ctaUrl || f.ctaRoute);
+          // all) — show them to super admins only; everyone else gets name +
+          // rationale alone (a non-admin clicking into a HubSpot permission
+          // wall is worse than no link).
+          //
+          // "Learn more →" (docs_url) intentionally NOT rendered (Jasper
+          // 2026-10-14): every feature's docs_url points at the same single
+          // setup guide — noise until per-feature articles exist. docs_url
+          // stays in the wire contract; re-enabling is a one-line revert.
+          const ctas = isSuperAdmin ? f.ctas : [];
           return (
             <Flex key={f.key} direction="column" gap="extra-small">
               <Text format={{ fontWeight: "demibold" }}>{f.name}</Text>
               {f.rationale ? <Text>{f.rationale}</Text> : null}
-              {showCta && f.ctaUrl ? (
-                <Link href={{ url: f.ctaUrl, external: true }}>
-                  {f.ctaLabel} →
-                </Link>
-              ) : null}
-              {showCta && !f.ctaUrl && f.ctaRoute && onNavigate ? (
-                <Button variant="secondary" onClick={() => onNavigate(f.ctaRoute)}>
-                  {f.ctaLabel}
-                </Button>
-              ) : null}
-              {f.docsUrl ? (
-                <Link href={{ url: f.docsUrl, external: true }}>
-                  Learn more →
-                </Link>
-              ) : null}
+              {ctas.map((cta) =>
+                cta.url ? (
+                  <Link key={cta.label} href={{ url: cta.url, external: true }}>
+                    {cta.label} →
+                  </Link>
+                ) : onNavigate ? (
+                  <Button
+                    key={cta.label}
+                    variant="secondary"
+                    onClick={() => onNavigate(cta.route)}
+                  >
+                    {cta.label}
+                  </Button>
+                ) : null
+              )}
             </Flex>
           );
         })}

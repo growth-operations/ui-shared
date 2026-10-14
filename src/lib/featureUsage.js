@@ -15,9 +15,21 @@
 const normalizeUnit = (u) =>
   typeof u === "string" && u.toLowerCase().startsWith("event") ? "events" : "credits";
 
+// One well-formed setup CTA is {label: non-empty string, url XOR route:
+// non-empty string}. Anything else (missing label, both targets, neither
+// target, wrong types) is dropped — a malformed item never renders.
+const normalizeCta = (c) => {
+  if (!c || typeof c !== "object") return null;
+  const label = typeof c.label === "string" && c.label ? c.label : null;
+  const url = typeof c.url === "string" && c.url ? c.url : null;
+  const route = typeof c.route === "string" && c.route ? c.route : null;
+  if (!label || !(url || route) || (url && route)) return null;
+  return url ? { label, url } : { label, route };
+};
+
 // Resolve the feature_usage block into render-ready shape:
 //   { mostUsed: [{ key, name, count, unit }],
-//     notInUse: [{ key, name, docsUrl, rationale }] }
+//     notInUse: [{ key, name, docsUrl, rationale, ctas }] }
 // Returns null when the block is absent/malformed or BOTH lists are empty
 // (an install using every detectable feature has nothing to show here).
 export function resolveFeatureUsage(featureUsage) {
@@ -39,12 +51,10 @@ export function resolveFeatureUsage(featureUsage) {
       name: f.name,
       docsUrl: typeof f.docs_url === "string" && f.docs_url ? f.docs_url : null,
       rationale: typeof f.rationale === "string" ? f.rationale : "",
-      // Optional SETUP action (the same cta_* vocabulary as nudges): the "go
-      // do the thing" deep link for an unused feature — layout editor, store
-      // listing, or in-app route. Absent on backends that predate it.
-      ctaLabel: typeof f.cta_label === "string" && f.cta_label ? f.cta_label : null,
-      ctaUrl: typeof f.cta_url === "string" && f.cta_url ? f.cta_url : null,
-      ctaRoute: typeof f.cta_route === "string" && f.cta_route ? f.cta_route : null,
+      // Optional SETUP actions (1.26.0 — a LIST per feature: one feature can
+      // surface in multiple places, e.g. a card on both contacts and
+      // applications). Each item is {label, url|route}; absent/empty -> [].
+      ctas: (Array.isArray(f.ctas) ? f.ctas : []).map(normalizeCta).filter(Boolean),
     }));
 
   if (mostUsed.length === 0 && notInUse.length === 0) return null;
