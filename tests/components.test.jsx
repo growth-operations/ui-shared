@@ -502,11 +502,12 @@ describe("BillingBanner", () => {
 });
 
 describe("HealthHero", () => {
-  it("healthy + right_plan hero wraps the Alert body in a growing Box", () => {
-    // HubSpot's Alert lays icon + title + children in ONE ROW inside a
-    // width-capped content area — without a growing wrapper the body copy
-    // squeezes into a narrow column (seen on the ATS app-home hero). Every
-    // Alert body gets <Box flex="auto"> so it absorbs the free width.
+  it("healthy + right_plan hero folds the reassurance into the Alert TITLE", () => {
+    // HubSpot's Alert lays icon + title + children in ONE ROW and the children
+    // column does not grow — body copy squeezed narrow even wrapped in
+    // <Box flex="auto"> (seen live on the ATS app-home hero, 2026-10-14). So
+    // the reassurance rides in the title (whose slot grows with content) and
+    // the body only carries real reasons.
     const tree = renderComponent(HealthHero, {
       appName: "Test App",
       state: {
@@ -516,9 +517,26 @@ describe("HealthHero", () => {
     });
     const alert = findAll(tree, "Alert")[0];
     expect(alert.variant).toBe("success");
+    expect(alert.title).toBe(
+      "Everything looks healthy — and you're on the right plan"
+    );
     const boxes = findAll(alert, "Box");
     expect(boxes).toHaveLength(1);
     expect(boxes[0].flex).toBe("auto");
-    expect(textOf(boxes[0])).toContain("...and you're on the right plan");
+    expect(textOf(boxes[0])).toContain("Sync is up to date");
+    expect(textOf(boxes[0])).not.toContain("right plan");
+  });
+
+  it("healthy + right_plan hero with NO reasons renders no Alert body", () => {
+    const tree = renderComponent(HealthHero, {
+      appName: "Test App",
+      state: {
+        health: { level: "healthy", reasons: [] },
+        state: { plan_fit: { verdict: "right_plan" } },
+      },
+    });
+    const alert = findAll(tree, "Alert")[0];
+    expect(alert.title).toContain("— and you're on the right plan");
+    expect(findAll(alert, "Box")).toHaveLength(0);
   });
 });
