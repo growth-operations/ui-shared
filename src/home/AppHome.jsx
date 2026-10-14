@@ -1,5 +1,5 @@
 import React from "react";
-import { Flex, Tile, Text, LoadingSpinner } from "@hubspot/ui-extensions";
+import { Flex, LoadingSpinner } from "@hubspot/ui-extensions";
 import { InstallProgress } from "./InstallProgress";
 import { HealthHero } from "./HealthHero";
 import { OnboardingChecklist } from "./OnboardingChecklist";
@@ -10,50 +10,16 @@ import { PeriodComparison } from "./PeriodComparison";
 import { FeatureNudges } from "./FeatureNudges";
 import { HelpfulLinks } from "./HelpfulLinks";
 
-// Minimal inline ATS tile (the `pipeline` block). Kept tiny here rather than a
-// separate file — it's the simplest of the three archetype tiles. Renders
-// nothing when there's no pipeline block.
-function PipelineTile({ pipeline }) {
-  if (!pipeline) return null;
-  const byStage = pipeline.applications_by_stage ?? {};
-  return (
-    <Tile>
-      <Flex direction="column" gap="small">
-        <Text format={{ fontWeight: "bold" }}>Pipeline</Text>
-        <Flex direction="row" gap="large">
-          <Flex direction="column" gap="extra-small">
-            <Text format={{ fontWeight: "demibold" }}>Open jobs</Text>
-            <Text>{pipeline.open_jobs ?? 0}</Text>
-          </Flex>
-          <Flex direction="column" gap="extra-small">
-            <Text format={{ fontWeight: "demibold" }}>Outstanding scorecards</Text>
-            <Text>{pipeline.outstanding_scorecards ?? 0}</Text>
-          </Flex>
-        </Flex>
-        {Object.keys(byStage).length > 0 && (
-          <Flex direction="row" gap="medium">
-            {Object.entries(byStage).map(([stage, count]) => (
-              <Flex key={stage} direction="column" gap="extra-small">
-                <Text format={{ fontWeight: "demibold" }}>{stage}</Text>
-                <Text>{count}</Text>
-              </Flex>
-            ))}
-          </Flex>
-        )}
-      </Flex>
-    </Tile>
-  );
-}
-
 // Picks the single archetype activity tile (CONTRACT: at most ONE present).
-// sync_pulse -> SyncPulse; pipeline -> PipelineTile. The credit meter is
+// sync_pulse -> SyncPulse. The credit meter is
 // deliberately NOT on Home anymore (Andrew's 2026-10 feedback) — it lives at
 // the top of the Usage tab; Home's credit story is the top BillingBanner's
 // trial states plus the post-checklist period comparison. Renders nothing
-// when no tile applies.
+// when no tile applies. (The ATS `pipeline` tile was retired 2026-10-14 —
+// product decision: it duplicated the dedicated Applications/Jobs/Scorecards
+// tabs and its cold-started counters read wrong until churn.)
 function ArchetypeTile({ state }) {
   if (state.sync_pulse) return <SyncPulse syncPulse={state.sync_pulse} />;
-  if (state.pipeline) return <PipelineTile pipeline={state.pipeline} />;
   return null;
 }
 
@@ -67,7 +33,7 @@ function ArchetypeTile({ state }) {
 //                            plan_fit says so)
 //                          + <PlanFitBanner> (upgrade_recommended only)
 //                          + <OnboardingChecklist> (only if not complete)
-//                          + the archetype activity tile (sync/pipeline)
+//                          + the archetype activity tile (sync_pulse)
 //                          + <PeriodComparison> (post-checklist, when the
 //                            backend has a full closed period)
 //                          + <FeatureUsage> (once the non-billing setup steps
