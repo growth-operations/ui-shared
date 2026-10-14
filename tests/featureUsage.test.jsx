@@ -456,10 +456,36 @@ describe("FeatureUsage setup CTAs", () => {
       ],
     });
     expect(view.notInUse[0].ctas).toEqual([
-      { label: "Add it", url: "https://x.test" },
-      { label: "Open it", route: "/x" },
+      { label: "Add it", url: "https://x.test", adminOnly: true },
+      { label: "Open it", route: "/x", adminOnly: true },
     ]);
     expect(view.notInUse[1].ctas).toEqual([]);
+  });
+
+  it("resolver carries an explicit admin_only: false through as adminOnly: false", () => {
+    const view = resolveFeatureUsage({
+      most_used: [],
+      not_in_use: [
+        {
+          key: "ext",
+          name: "Extension",
+          ctas: [
+            {
+              label: "Install the Chrome extension",
+              url: "https://chromewebstore.google.com/detail/x",
+              admin_only: false,
+            },
+          ],
+        },
+      ],
+    });
+    expect(view.notInUse[0].ctas).toEqual([
+      {
+        label: "Install the Chrome extension",
+        url: "https://chromewebstore.google.com/detail/x",
+        adminOnly: false,
+      },
+    ]);
   });
 
   it("super admin sees every link of a multi-CTA feature", () => {
@@ -491,8 +517,9 @@ describe("FeatureUsage setup CTAs", () => {
     expect(textOf(links[1])).toContain("Add the card to applications");
   });
 
-  it("non-admins get NO links at all — name + rationale only", () => {
-    // Learn more is gone too (1.26.0), so a non-admin sees nothing clickable.
+  it("non-admins get no ADMIN links — name + rationale only", () => {
+    // Learn more is gone too (1.26.0), so a non-admin sees nothing clickable
+    // when every CTA is admin-gated (the default / old-backend behavior).
     const entry = {
       key: "rs",
       name: "Resume Summaries",
@@ -512,6 +539,40 @@ describe("FeatureUsage setup CTAs", () => {
       expect(text).toContain("Read a one-paragraph AI summary instead.");
       expect(text).not.toContain("Add the card");
     }
+  });
+
+  it("non-admins DO see ctas marked admin_only: false (per-user surfaces)", () => {
+    // Installing the Chrome extension is a per-user action — the marker
+    // bypasses the super-admin gate, per item (Jasper 2026-10-14).
+    const onNavigate = vi.fn();
+    const entry = {
+      key: "ext",
+      name: "ATS Assistant Chrome Extension",
+      rationale: "Save candidates from any web page.",
+      ctas: [
+        {
+          label: "Install the Chrome extension",
+          url: "https://chromewebstore.google.com/detail/x",
+          admin_only: false,
+        },
+        { label: "Open the extension page", route: "/extension", admin_only: false },
+        // A gated sibling stays hidden for the same viewer.
+        { label: "Add the card", url: "https://app.hubspot.com/layout-editor/1/x" },
+      ],
+    };
+    const tree = renderComponent(FeatureUsage, {
+      state: { state: { feature_usage: ctaBlock(entry) }, user: { is_super_admin: false } },
+      onNavigate,
+    });
+    const links = findAll(tree, "Link");
+    expect(links).toHaveLength(1);
+    expect(textOf(links[0])).toContain("Install the Chrome extension");
+    const buttons = findAll(tree, "Button");
+    expect(buttons).toHaveLength(1);
+    expect(textOf(buttons[0])).toContain("Open the extension page");
+    buttons[0].onClick();
+    expect(onNavigate).toHaveBeenCalledWith("/extension");
+    expect(textOf(tree)).not.toContain("Add the card");
   });
 
   it("route items render a Button wired to onNavigate", () => {
