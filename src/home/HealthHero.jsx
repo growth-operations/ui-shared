@@ -31,21 +31,31 @@ export function HealthHero({ appName, state }) {
     const planFit = state.state?.plan_fit ?? state.plan_fit;
     const onRightPlan =
       health.level === "healthy" && planFit?.verdict === "right_plan";
+    const reasons = health.reasons ?? [];
+    // The reassurance rides in the TITLE, not the Alert body: HubSpot's Alert
+    // lays icon + title + children out side-by-side and the children column
+    // does NOT grow to fill the banner (Box flex="auto" didn't win — the body
+    // still wrapped narrow with half the banner empty, seen on the ATS Home
+    // hero 2026-10-14). The title slot grows with its content, so the line
+    // renders full-width on one line. The body is reserved for actual
+    // reasons (attention/critical), and omitted entirely when there are none.
+    const baseTitle = HEALTH_TITLE[health.level] ?? "Status";
+    const title = onRightPlan
+      ? `${baseTitle} — and you're on the right plan`
+      : baseTitle;
     return (
       <Flex direction="column" gap="small">
         {name && <Heading>{name}</Heading>}
-        <Alert
-          title={HEALTH_TITLE[health.level] ?? "Status"}
-          variant={HEALTH_VARIANT[health.level] ?? "info"}
-        >
-          <Box flex="auto">
-            <Flex direction="column" gap="extra-small">
-              {(health.reasons ?? []).map((r, i) => (
-                <Text key={i}>{r}</Text>
-              ))}
-              {onRightPlan && <Text>...and you're on the right plan</Text>}
-            </Flex>
-          </Box>
+        <Alert title={title} variant={HEALTH_VARIANT[health.level] ?? "info"}>
+          {reasons.length > 0 && (
+            <Box flex="auto">
+              <Flex direction="column" gap="extra-small">
+                {reasons.map((r, i) => (
+                  <Text key={i}>{r}</Text>
+                ))}
+              </Flex>
+            </Box>
+          )}
         </Alert>
       </Flex>
     );
